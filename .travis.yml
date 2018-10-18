@@ -1,0 +1,49 @@
+language: python
+python:
+  - "3.6"
+  - "3.7-dev"
+
+env:
+  matrix:
+    - OS_TYPE=centos OS_VERSION=7
+    - OS_TYPE=ubuntu
+
+matrix:
+  exclude:
+    - python: "3.7-dev"
+      env: "OS_TYPE=centos OS_VERSION=7"
+
+services:
+  - docker
+
+sudo: true
+
+before_install:
+  - if test "${OS_TYPE}" == 'centos' ; then sudo apt-get update; fi
+  - if test "${OS_TYPE}" == 'centos' ; then echo 'DOCKER_OPTS="-H tcp://127.0.0.1:2375 -H unix:///var/run/docker.sock -s devicemapper"' | sudo tee /etc/default/docker > /dev/null; fi
+  - if test "${OS_TYPE}" == 'centos' ; then sudo service docker restart; fi
+  - if test "${OS_TYPE}" == 'centos' ; then sudo docker pull centos:centos${OS_VERSION}; fi
+
+install:
+  - if test "${OS_TYPE}" == 'ubuntu' ; then pip install pipenv; fi
+  - if test "${OS_TYPE}" == 'ubuntu' ; then PIPENV_IGNORE_VIRTUALENVS=1 pipenv install --dev; fi
+
+before_script:
+  - cp config/lm-unit.yaml.example config/lm-unit.yaml
+  - echo "set -e"                   >./test_centos.sh
+  - echo "export LC_ALL=en_US.utf8" >>./test_centos.sh
+  - echo "rpm -Uvh https://dl.fedoraproject.org/pub/epel/epel-release-latest-7.noarch.rpm" >>./test_centos.sh
+  - echo "rpm -Uvh https://centos7.iuscommunity.org/ius-release.rpm"                       >>./test_centos.sh
+  - echo "yum install gcc which python36u python36u-devel python36u-pip -y"                >>./test_centos.sh
+  - echo "cd /test"                 >>./test_centos.sh
+  - echo "PIPENV_VENV_IN_PROJECT=1 pip3.6 install pipenv"                  >>./test_centos.sh
+  - echo "pipenv install --dev"     >>./test_centos.sh
+  - echo "pipenv run mamba"         >>./test_centos.sh
+  - echo "pipenv run pycodestyle \`find . -name '*.py' | grep -v \.venv\`" >>./test_centos.sh
+  - echo "#end of file"             >>./test_centos.sh
+
+script:
+  - if test "${OS_TYPE}" == 'centos' ; then sudo docker run -v `pwd`:/test -t centos:centos7 bash /test/test_centos.sh; fi
+  - if test "${OS_TYPE}" == 'ubuntu' ; then PIPENV_IGNORE_VIRTUALENVS=1 pipenv run mamba; fi
+  - if test "${OS_TYPE}" == 'ubuntu' ; then PIPENV_IGNORE_VIRTUALENVS=1 pipenv run pycodestyle `find . -name '*.py' | grep -v \.venv`; fi
+
