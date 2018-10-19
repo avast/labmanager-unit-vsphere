@@ -14,37 +14,37 @@ Contributors outside QA Automation team are required to discuss the contribution
   ```
   PIPENV_VENV_IN_PROJECT=1 pip install pipenv
   ```
-* Install Project dependencies:
+* Install project dependencies:
   ```
   pipenv install
   ```
 
 ### Code
-* Python code changes need to follow PEP8
- * plus indentation using 4 spaces only
- * plus allowing 100 character lines instead of 80
+* Python code changes need to follow PEP8, with following tweaks:
+    * indentation restricted to 4 spaces only
+    * allowing 100 character lines instead of 80
 * New features covered via specs
 
 ### Branching
 * Features
- * branches named `feat_*`, snake case
- * single commit, message starting with `feat: `
+    * branches named `feat_*`, snake case
+    * single commit, message starting with `feat: `
 
 * Fixes
- * branches named `fix_*`, snake case
- * single commit, message starting with `fix: `
+    * branches named `fix_*`, snake case
+    * single commit, message starting with `fix: `
 
 * Refactoring
- * branches named `refactor_*`, snake case
- * single commit, message starting with `refactor: `
+    * branches named `refactor_*`, snake case
+    * single commit, message starting with `refactor: `
 
 * Documentation
- * branches named `doc_*`, snake case
- * single commit, message starting with `doc: `
+    * branches named `doc_*`, snake case
+    * single commit, message starting with `doc: `
 
 * Chores
- * branches named `chore_*`, snake case
- * single commit, message starting with `chore: `
+    * branches named `chore_*`, snake case
+    * single commit, message starting with `chore: `
 
 ## Production use
 
