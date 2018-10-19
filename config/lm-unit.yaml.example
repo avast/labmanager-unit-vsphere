@@ -1,0 +1,30 @@
+default: &defaults
+  log_level: DEBUG
+
+  db:
+    host: localhost
+    database: fake_database
+    replica_set: fake_replica_set
+
+  vsphere:
+    host: fake_host
+    username: fake_user
+    password: fake_password
+    port: 42
+    default_snapshot_name: fake_default_snapshot
+    default_network_name: fake_network
+
+  service:
+    host: 0.0.0.0
+    port: 666
+    workers: 6
+
+production:
+  <<: *defaults
+  log_level: WARNING
+
+development:
+  <<: *defaults
+
+test:
+  <<: *defaults
