@@ -7,9 +7,10 @@ name = "pypi"
 
 [dev-packages]
 
-expects = ">=0.8.0"
-mock    = ">=2.0.0"
-mamba   = "*"
+expects     = ">=0.8.0"
+mock        = ">=2.0.0"
+mamba       = "*"
+pycodestyle = "==2.4.0"
 
 [packages]
 
@@ -20,6 +21,7 @@ pyvmomi = "==6.7.0.2018.9"
 pyYaml  = "==3.13"
 deepmerge="==0.0.4"
 
-[requires]
+#[requires]
 
-python_version = "3.6"
+#python_version = ">=3.6"
+
