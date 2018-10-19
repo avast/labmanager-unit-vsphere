@@ -6,7 +6,7 @@ REST service for machine control on vmWare vSphere.
 
 Anyone wishing to join the development needs to adhere to the following rules.
 
-Contributors outside QA Automation team are required to discuss the contribution first via 
+Contributors outside QA Automation team are required to discuss the contribution first via GitHub Issues.
 
 ### Technical requirements for development
 * Install Python 3.6
