@@ -12,11 +12,11 @@ Contributors outside QA Automation team are required to discuss the contribution
 * Install Python 3.6
 * Install pipenv
   ```
-  PIPENV_VENV_IN_PROJECT=1 pip install pipenv
+  pip install pipenv
   ```
 * Install project dependencies:
   ```
-  pipenv install
+  PIPENV_VENV_IN_PROJECT=1 pipenv install
   ```
 
 ### Code
