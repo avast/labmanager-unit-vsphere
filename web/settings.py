@@ -11,7 +11,7 @@ class Settings:
             'db': {
                 'host': 'localhost'
             },
-            'vcenter': {
+            'vsphere': {
                 'port': 443
             },
             'service': {
