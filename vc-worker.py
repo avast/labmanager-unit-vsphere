@@ -172,6 +172,7 @@ if __name__ == '__main__':
                             replicaSet=settings.app['db']['replica_set']
     )
     vc = vcenter.VCenter()
+    vc.connect()
 
     idle_counter = 0
     with data.Connection.use('conn1') as conn:
