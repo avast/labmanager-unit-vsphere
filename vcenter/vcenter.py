@@ -10,6 +10,7 @@ import time
 import logging
 import re
 
+
 class VCenter():
 
     def __init__(self):
@@ -50,14 +51,14 @@ class VCenter():
         self.__check_connection()
         self.__logger.debug('keeping connection alive: {}'.format(self.content.about.vendor))
 
-    def __single_snapshot_search(self, _list, snapshot_name):
-        for item in _list:
+    def __find_snapshot_by_name(self, snapshot_list, snapshot_name):
+        for item in snapshot_list:
             if(item.name == snapshot_name):
                 self.__logger.debug('snapshot found: {}'.format(item))
                 return(item.snapshot)
 
             if item.childSnapshotList != []:
-                return self.__single_snapshot_search(item.childSnapshotList, snapshot_name)
+                return self.__find_snapshot_by_name(item.childSnapshotList, snapshot_name)
 
     def search_for_snapshot(self, vm, snapshot_name):
         for item in vm.snapshot.rootSnapshotList:
@@ -65,7 +66,7 @@ class VCenter():
                 return(item.snapshot)
 
             if item.childSnapshotList != []:
-                return self.__single_snapshot_search(item.childSnapshotList, snapshot_name)
+                return self.__find_snapshot_by_name(item.childSnapshotList, snapshot_name)
 
         raise ValueError('snapshot {} cannot be found'.format(snapshot_name))
         return None
@@ -76,8 +77,12 @@ class VCenter():
         destination_folder = None
         try:
             destination_folder = self.vm_folders.create_folder(settings.app['vsphere']['folder'])
-        except:
-            pass
+        except Exception e:
+            self.__logger.warn(
+                'destination folder {} was not created'.format(settings.app['vsphere']['folder'])
+            )
+
+            raise e
 
         objView = self.content.viewManager.CreateContainerView(self.content.rootFolder,
                                                                [vim.VirtualMachine],
@@ -231,7 +236,7 @@ class VCenter():
         def __init__(self, parent):
             self.vm_folders = {}
             self.__logger = logging.getLogger(__name__)
-            self.parent=parent
+            self.parent = parent
 
         def create_subfolder(self, path, subpath):
             self.__logger.debug("A request to create {} in {}".format(subpath, path))
@@ -249,6 +254,7 @@ class VCenter():
             objView.DestroyView()
             self.__collect_all_folders()
             return new_folder
+
         def __obtain_folder(self, path):
             objView = self.parent.content.viewManager.CreateContainerView(
                 self.parent.content.rootFolder,
@@ -262,9 +268,9 @@ class VCenter():
             finally:
                 objView.DestroyView()
 
-        def create_folder(self, o_path):
+        def create_folder(self, folder_path):
             self.__collect_all_folders()
-            path = self.__correct_folder_format(o_path)
+            path = self.__correct_folder_format(folder_path)
             if path in self.vm_folders:
                 return self.__obtain_folder(path)
 
@@ -273,15 +279,15 @@ class VCenter():
             for splitindex in range(2, len(items)):
                 temp_path = '/'.join(items[:splitindex])
                 next_folder = items[splitindex:][0]
-                if temp_path+'/'+next_folder  not in self.vm_folders:
+                if temp_path+'/'+next_folder not in self.vm_folders:
                     created_folder = self.create_subfolder(temp_path, next_folder)
 
             if path not in self.vm_folders:
                 self.__logger.warn("Directory {} not created".format(path))
             return self.__obtain_folder(path)
 
-        def move_vm_to_folder(self, vm_uuid, out_path):
-            path = self.__correct_folder_format(out_path)
+        def move_vm_to_folder(self, vm_uuid, folder_path):
+            path = self.__correct_folder_format(folder_path)
             if path not in self.vm_folders:
                 self.create_folder(path)
 
@@ -326,12 +332,9 @@ class VCenter():
                 return "/{}".format(folder.name)
 
         def __correct_folder_format(self, folder):
-            f_folder = re.sub("[/\s]*$","", folder)
+            f_folder = re.sub(r'[/\s]*', '', folder)
             if not f_folder.startswith('/vm/'):
                 raise Exception("correct folder definition must look like\
                  \"/vm/root_folder/subfolder..... not {}\"".format(f_folder))
 
             return f_folder
-
-
-
