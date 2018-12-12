@@ -77,7 +77,7 @@ class VCenter():
         destination_folder = None
         try:
             destination_folder = self.vm_folders.create_folder(settings.app['vsphere']['folder'])
-        except Exception e:
+        except Exception as e:
             self.__logger.warn(
                 'destination folder {} was not created'.format(settings.app['vsphere']['folder'])
             )
