@@ -5,6 +5,10 @@ default: &defaults
     host: localhost
     database: fake_database
     replica_set: fake_replica_set
+    ssl_ca_certs_file: /foo/bar
+    ssl: true
+    username: ~
+    password: ~
 
   vsphere:
     host: fake_host
