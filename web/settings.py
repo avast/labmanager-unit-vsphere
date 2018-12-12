@@ -9,7 +9,11 @@ class Settings:
             'unit_name': 'fake_unit',
             'log_level': 'DEBUG',
             'db': {
-                'host': 'localhost'
+                'host': 'localhost',
+                'ssl': False,
+                'ssl_ca_certs_file': None,
+                'username': None,
+                'password': None
             },
             'vsphere': {
                 'port': 443
