@@ -13,6 +13,7 @@ default: &defaults
     port: 42
     default_snapshot_name: fake_default_snapshot
     default_network_name: fake_network
+    folder: /vm/fake/folder
 
   service:
     host: 0.0.0.0
