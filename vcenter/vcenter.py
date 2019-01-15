@@ -332,7 +332,7 @@ class VCenter():
                 return "/{}".format(folder.name)
 
         def __correct_folder_format(self, folder):
-            f_folder = re.sub(r'[/\s]*', '', folder)
+            f_folder = re.sub(r'[/\s]*$', '', folder)
             if not f_folder.startswith('/vm/'):
                 raise Exception("correct folder definition must look like\
                  \"/vm/root_folder/subfolder..... not {}\"".format(f_folder))
