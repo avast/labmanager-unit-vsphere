@@ -8,6 +8,8 @@ class Settings:
     app = {
             'unit_name': 'fake_unit',
             'log_level': 'DEBUG',
+            'log_format': '%(asctime)s %(thread)d %(threadName)s %(levelname)s: %(message)s',
+            'log_datefmt': '%Y-%M-%dT%H:%M:%S.000Z',
             'db': {
                 'host': 'localhost',
                 'ssl': False,
@@ -42,4 +44,8 @@ class Settings:
 
 
 Settings.configure()
-logging.basicConfig(level=getattr(logging, Settings.app['log_level']))
+logging.basicConfig(
+  level=getattr(logging, Settings.app['log_level']),
+  format=Settings.app['log_format'],
+  datefmt=Settings.app['log_datefmt']
+)
