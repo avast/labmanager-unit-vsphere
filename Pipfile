@@ -18,7 +18,7 @@ sanic   = "==0.8.3"
 aiohttp = "==3.4.4"
 pymongo = "==3.7.1"
 pyvmomi = "==6.7.0.2018.9"
-pyYaml  = "==3.13"
+pyYaml  = "==4.2b1"
 deepmerge="==0.0.4"
 
 #[requires]
