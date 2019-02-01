@@ -71,15 +71,25 @@ class VCenter():
         raise ValueError('snapshot {} cannot be found'.format(snapshot_name))
         return None
 
-    def deploy(self, template, machine_name):
+    def deploy(self, template, machine_name, **kwargs):
         self.__check_connection()
+        destination_folder_name = settings.app['vsphere']['folder']
+        if 'inventory_folder' in kwargs and kwargs['inventory_folder'] is not None:
+            inventory_folder = kwargs['inventory_folder']
+            destination_folder_name = '{}/{}'.format(
+                                                        settings.app['vsphere']['folder'],
+                                                        inventory_folder
+            )
 
         destination_folder = None
         try:
-            destination_folder = self.vm_folders.create_folder(settings.app['vsphere']['folder'])
+            destination_folder = self.vm_folders.create_folder(destination_folder_name)
         except Exception as e:
             self.__logger.warn(
-                'destination folder {} was not created'.format(settings.app['vsphere']['folder'])
+                'destination folder {} was not created because {}'.format(
+                    destination_folder_name,
+                    e
+                )
             )
 
             raise e
@@ -129,11 +139,33 @@ class VCenter():
                         raise RuntimeError("virtual machine hasn't been returned")
 
                     self.__logger.debug('Task finished with status: {}'.format(vm.config.uuid))
+
+                    self.__logger.debug('vms parent: {}'.format(vm.parent))
                 except Exception as e:
                     self.__logger.warn('pyvmomi related exception: ', exc_info=True)
         objView.Destroy()
 
         return vm.config.uuid
+
+    def __search_sibling_machines(self, parent_folder, vm_uuid):
+        result = []
+        self.__logger.debug('searching for sibling machines in: {}({})'.format(
+                                                                                parent_folder,
+                                                                                parent_folder.name
+        ))
+        objView = self.content.viewManager.CreateContainerView(
+                                                                self.content.rootFolder,
+                                                                [vim.VirtualMachine],
+                                                                True
+        )
+
+        for item in objView.view:
+            if item.parent == parent_folder and item.config.uuid != vm_uuid:
+                self.__logger.debug('>>found: {}'.format(item.name))
+                result.append(item)
+        objView.Destroy()
+        self.__logger.debug('searching done')
+        return result
 
     def undeploy(self, uuid):
         self.__check_connection()
@@ -141,9 +173,23 @@ class VCenter():
         vm = self.content.searchIndex.FindByUuid(None, uuid, True)
         if vm:
             self.__logger.debug('found vm: {}'.format(vm.config.uuid))
+
+            parent_folder = vm.parent
+            sibling_machines = self.__search_sibling_machines(parent_folder, vm.config.uuid)
+
             task = vm.Destroy_Task()
             self.wait_for_task(task)
             self.__logger.debug('vm killed')
+
+            if len(sibling_machines) == 0:
+                self.__logger.debug(
+                    'folder: {}({}) is going to be removed'.format(
+                                                                    parent_folder,
+                                                                    parent_folder.name
+                    )
+                )
+                self.vm_folders.delete_folder(parent_folder)
+                self.__logger.debug('folder: deleted')
         else:
             raise Exception('machine {} not found'.format(uuid))
 
@@ -217,7 +263,6 @@ class VCenter():
             return result
 
     def wait_for_task(self, task):
-        time.sleep(3)
         while (task.info.state == 'running' or task.info.state == 'queued'):
             self.__logger.debug('Progress {}% | Task: {}\r'.format(
                 task.info.progress,
@@ -285,6 +330,10 @@ class VCenter():
             if path not in self.vm_folders:
                 self.__logger.warn("Directory {} not created".format(path))
             return self.__obtain_folder(path)
+
+        def delete_folder(self, folder):
+            task = folder.Destroy_Task()
+            self.parent.wait_for_task(task)
 
         def move_vm_to_folder(self, vm_uuid, folder_path):
             path = self.__correct_folder_format(folder_path)

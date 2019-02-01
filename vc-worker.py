@@ -28,7 +28,15 @@ def get_template(labels):
 
 def get_network_interface(labels):
     for l in labels:
-        matches = re.match('config:networkInterface=(.*)', l)
+        matches = re.match('config:network_interface=(.*)', l)
+        if matches:
+            return matches[1]
+    return None
+
+
+def get_inventory_folder(labels):
+    for l in labels:
+        matches = re.match('config:inventory_path=(.*)', l)
         if matches:
             return matches[1]
     return None
@@ -44,9 +52,14 @@ def action_deploy(conn, action, vc):
 
             template = get_template(machine.labels)
             network_interface = get_network_interface(machine.labels)
+            inventory_folder = get_inventory_folder(machine.labels)
 
             try:
-                uuid = vc.deploy(template, '{}-{}'.format(template, request.machine))
+                uuid = vc.deploy(
+                                    template,
+                                    '{}-{}'.format(template, request.machine),
+                                    inventory_folder=inventory_folder
+                                )
                 if network_interface:
                     vc.config_network(uuid, interface_name=network_interface)
             except Exception:
