@@ -71,7 +71,43 @@ class VCenter():
         raise ValueError('snapshot {} cannot be found'.format(snapshot_name))
         return None
 
-    def deploy(self, template, machine_name, **kwargs):
+    def __search_machine_by_name(self, vm_name):
+        objView = self.content.viewManager.CreateContainerView(self.content.rootFolder,
+                                                               [vim.VirtualMachine],
+                                                               True)
+
+        vm = next(item for item in objView.view if item.name == vm_name, None)
+        objView.Destroy()
+        return vm
+
+    def __clone_template(self, template, machine_name, destination_folder, snapshot_name):
+
+        snap = self.search_for_snapshot(
+                                                    template,
+                                                    snapshot_name
+                    )
+
+        # for full clone, use 'moveAllDiskBackingsAndDisallowSharing'
+        spec = vim.vm.CloneSpec(
+                        location=vim.vm.RelocateSpec(
+                            datastore=template.datastore[0],
+                            diskMoveType='createNewChildDiskBacking',
+                            host=template.runtime.host,
+                            transform=vim.vm.RelocateSpec.Transformation.sparse
+                        ),
+                        powerOn=False,
+                        snapshot=snap,
+                        template=False,
+                    )
+
+        task = template.CloneVM_Task(
+                        destination_folder if destination_folder else template.parent,
+                        machine_name,
+                        spec
+                    )
+        return task
+
+    def deploy(self, template_name, machine_name, **kwargs):
         self.__check_connection()
         destination_folder_name = settings.app['vsphere']['folder']
         if 'inventory_folder' in kwargs and kwargs['inventory_folder'] is not None:
@@ -94,58 +130,66 @@ class VCenter():
 
             raise e
 
-        objView = self.content.viewManager.CreateContainerView(self.content.rootFolder,
-                                                               [vim.VirtualMachine],
-                                                               True)
+        template = self.__search_machine_by_name(template_name)
         vm = None
-        for item in objView.view:
-            if item.name == template:
-                self.__logger.debug('machine: {}\n{}--{}---\n'.format(
-                                                                        dir(item),
-                                                                        item._GetMoId(),
-                                                                        item.name
-                ))
-                self.__logger.debug('parent: {}\n'.format(item.parent._GetMoId()))
-                self.__logger.debug('datastores: {}\n'.format(item.datastore[0]))
+        if not template:
+            raise RuntimeError("template {} hasn't been found".format(template_name))
 
-                try:
-                    self.__logger.debug('snapshot: {}\n'.format(dir(item.snapshot.currentSnapshot)))
-                    snap = self.search_for_snapshot(
-                                                    item,
-                                                    settings.app['vsphere']['default_snapshot_name']
-                    )
+        self.__logger.debug('template moid: {}\t name: {}'.format(template._GetMoId(),
+                                                                  template.name))
+        self.__logger.debug('parent: {}'.format(template.parent._GetMoId()))
+        self.__logger.debug('datastore: {}'.format(template.datastore[0].name))
+        self.__logger.debug('snapshot: {}'.format(template.snapshot.currentSnapshot))
+        retry_deploy_count = settings.app['vsphere']['retries']['deploy']
+        retry_delete_count = settings.app['vsphere']['retries']['delete']
+        for i in range(retry_deploy_count):
+            try:
+                task = self.__clone_template(
+                    template,
+                    machine_name,
+                    destination_folder,
+                    settings.app['vsphere']['default_snapshot_name']
+                )
 
-                    # for full clone, use 'moveAllDiskBackingsAndDisallowSharing'
-                    spec = vim.vm.CloneSpec(
-                        location=vim.vm.RelocateSpec(
-                            datastore=item.datastore[0],
-                            diskMoveType='createNewChildDiskBacking',
-                            host=item.runtime.host,
-                            transform=vim.vm.RelocateSpec.Transformation.sparse
-                        ),
-                        powerOn=False,
-                        snapshot=snap,
-                        template=False,
-                    )
-
-                    task = item.CloneVM_Task(
-                        destination_folder if destination_folder else item.parent,
-                        machine_name,
-                        spec
-                    )
-
-                    vm = self.wait_for_task(task)
-                    if not vm:
-                        raise RuntimeError("virtual machine hasn't been returned")
-
-                    self.__logger.debug('Task finished with status: {}'.format(vm.config.uuid))
-
+                vm = self.wait_for_task(task)
+                self.__logger.debug('Task finished with value: {}'.format(vm))
+                if not vm:
+                    # machine must be checked whether it has been created or not,
+                    # in no-case machine creation must be re-executed
+                    # in yes-case created machine must be deleted and no-case repeated
+                    for f in range(retry_delete_count):
+                        failed_vm = self.__search_machine_by_name(machine_name)
+                        if failed_vm:
+                            self.__logger.warn(
+                                'junk machine {} has been created: {}'.format(
+                                    machine_name,
+                                    failed_vm
+                                )
+                            )
+                            destroy_task = failed_vm.Destroy_Task()
+                            self.wait_for_task(destroy_task)
+                            failed_vm_recheck = self.__search_machine_by_name(machine_name)
+                            if not failed_vm_recheck:
+                                self.__logger.warn(
+                                    'junk machine {} has been deleted successfully'.format(
+                                        machine_name
+                                    )
+                                )
+                                break
+                            else:
+                                self.__logger.warn(
+                                    'junk machine {} has not been deleted'.format(
+                                        machine_name
+                                    )
+                                )
+                    time.sleep(1)
+                else:
                     self.__logger.debug('vms parent: {}'.format(vm.parent))
-                except Exception as e:
-                    self.__logger.warn('pyvmomi related exception: ', exc_info=True)
-        objView.Destroy()
-
-        return vm.config.uuid
+            except Exception as e:
+                self.__logger.warn('pyvmomi related exception: ', exc_info=True)
+            if vm:
+                return vm.config.uuid
+        raise RuntimeError("virtual machine hasn't been deployed")
 
     def __search_sibling_machines(self, parent_folder, vm_uuid):
         result = []

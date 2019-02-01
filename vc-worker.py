@@ -62,8 +62,9 @@ def action_deploy(conn, action, vc):
                                 )
                 if network_interface:
                     vc.config_network(uuid, interface_name=network_interface)
-            except Exception:
+            except Exception as e:
                 logger.info('Exception deploying machine: ', exc_info=True)
+                raise e
 
             machine.provider_id = uuid
             request.state = 'success'
@@ -74,7 +75,7 @@ def action_deploy(conn, action, vc):
         action.lock = -1
         action.save(conn=conn)
     except Exception:
-        logger.error('Exception: ', exc_info=True)
+        logger.error('action_deploy exception: ', exc_info=True)
     finally:
         logger.info('{}-{}<-'.format(os.getpid(), action.id))
 

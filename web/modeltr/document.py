@@ -96,11 +96,11 @@ class Document(object):
         )
 
         self.__logger.debug(
-            'document saved {}\n  raw_result: {}\n  modified_count: {}\n  matched_count: {}'.format(
+            'document saved {} => modified_count: {}\t  matched_count: {}\t raw_result: {}'.format(
                 self.id,
-                result.raw_result,
                 result.modified_count,
-                result.matched_count
+                result.matched_count,
+                result.raw_result,
             )
         )
 

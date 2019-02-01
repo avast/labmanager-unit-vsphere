@@ -16,6 +16,8 @@ class Connection(object):
         else:
             self.__logger.debug('Exception occurred in Connection')
 
+        self.session.end_session()
+
     # example usage: web.modeltr.connection.Connection(
     #   host='localhost', authSource='test_database', replicaSet='rs0')
     # auth source must be present here
@@ -52,6 +54,7 @@ class Transaction(object):
         if traceback is None:
             self.__logger.debug('Transaction successful')
             self.conn.session.commit_transaction()
+            self.__logger.debug('Transaction has been committed successfully')
         else:
             self.conn.session.abort_transaction()
             self.__logger.debug('Exception occurred during transaction')
