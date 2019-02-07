@@ -18,7 +18,11 @@ class Settings:
                 'password': None
             },
             'vsphere': {
-                'port': 443
+                'port': 443,
+                'retries': {
+                    'deploy': 15,
+                    'delete': 5
+                }
             },
             'service': {
                 'listen': '127.0.0.1',
