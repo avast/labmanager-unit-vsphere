@@ -76,7 +76,7 @@ class VCenter():
                                                                [vim.VirtualMachine],
                                                                True)
 
-        vm = next(item for item in objView.view if item.name == vm_name, None)
+        vm = next((item for item in objView.view if item.name == vm_name), None)
         objView.Destroy()
         return vm
 
