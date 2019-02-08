@@ -9,6 +9,7 @@ import atexit
 import time
 import logging
 import re
+import random
 
 
 class VCenter():
@@ -17,7 +18,7 @@ class VCenter():
         self._connected = False
         self.content = None
         self.__logger = logging.getLogger(__name__)
-        self.vm_folders = VCenter.VmFolders(self)
+        self.vm_folders = None
 
     def __check_connection(self):
         try:
@@ -46,10 +47,18 @@ class VCenter():
 
         self.content = si.content
         self._connected = True
+        self.vm_folders = VCenter.VmFolders(self)
 
     def idle(self):
         self.__check_connection()
         self.__logger.debug('keeping connection alive: {}'.format(self.content.about.vendor))
+
+    def __sleep_between_tries(self):
+        time.sleep(random.uniform(
+                        settings.app['vsphere']['retries']['delay_period_min'],
+                        settings.app['vsphere']['retries']['delay_period_max']
+        )
+        )
 
     def __find_snapshot_by_name(self, snapshot_list, snapshot_name):
         for item in snapshot_list:
@@ -72,13 +81,27 @@ class VCenter():
         return None
 
     def __search_machine_by_name(self, vm_name):
-        objView = self.content.viewManager.CreateContainerView(self.content.rootFolder,
-                                                               [vim.VirtualMachine],
-                                                               True)
+        for cnt in range(settings.app['vsphere']['retries']['default']):
+            try:
+                objView = self.content.viewManager.CreateContainerView(
+                                                                       self.content.rootFolder,
+                                                                       [vim.VirtualMachine],
+                                                                       True
+                )
 
-        vm = next(item for item in objView.view if item.name == vm_name, None)
-        objView.Destroy()
-        return vm
+                vm = next((item for item in objView.view if item.name == vm_name), None)
+                objView.Destroy()
+                return vm
+            except vmodl.fault.ManagedObjectNotFound:
+                self.__logger.warn(
+                                    'vmodl.fault.ManagedObjectNotFound nas occured, try: {}'.format(
+                                        cnt
+                                    )
+                )
+                self.__sleep_between_tries()
+            except Exception:
+                settings.raven.captureException(exc_info=True)
+        raise ValueError('machine {} cannot be found'.format(vm_name))
 
     def __clone_template(self, template, machine_name, destination_folder, snapshot_name):
 
@@ -116,38 +139,25 @@ class VCenter():
                                                         settings.app['vsphere']['folder'],
                                                         inventory_folder
             )
-
-        destination_folder = None
-        try:
-            destination_folder = self.vm_folders.create_folder(destination_folder_name)
-        except Exception as e:
-            self.__logger.warn(
-                'destination folder {} was not created because {}'.format(
-                    destination_folder_name,
-                    e
-                )
-            )
-
-            raise e
-
-        template = self.__search_machine_by_name(template_name)
-        vm = None
-        if not template:
-            raise RuntimeError("template {} hasn't been found".format(template_name))
-
-        self.__logger.debug('template moid: {}\t name: {}'.format(template._GetMoId(),
-                                                                  template.name))
-        self.__logger.debug('parent: {}'.format(template.parent._GetMoId()))
-        self.__logger.debug('datastore: {}'.format(template.datastore[0].name))
-        self.__logger.debug('snapshot: {}'.format(template.snapshot.currentSnapshot))
         retry_deploy_count = settings.app['vsphere']['retries']['deploy']
         retry_delete_count = settings.app['vsphere']['retries']['delete']
+        vm = None
+        vm_uuid = None
         for i in range(retry_deploy_count):
             try:
+                template = self.__search_machine_by_name(template_name)
+                if not template:
+                    raise RuntimeError("template {} hasn't been found".format(template_name))
+
+                self.__logger.debug('template moid: {}\t name: {}'.format(template._GetMoId(),
+                                                                          template.name))
+                self.__logger.debug('parent: {}'.format(template.parent._GetMoId()))
+                self.__logger.debug('datastore: {}'.format(template.datastore[0].name))
+                self.__logger.debug('snapshot: {}'.format(template.snapshot.currentSnapshot))
                 task = self.__clone_template(
                     template,
                     machine_name,
-                    destination_folder,
+                    self.vm_folders.create_folder(settings.app['vsphere']['folder']),
                     settings.app['vsphere']['default_snapshot_name']
                 )
 
@@ -182,13 +192,37 @@ class VCenter():
                                         machine_name
                                     )
                                 )
-                    time.sleep(1)
+                    self.__sleep_between_tries()
                 else:
                     self.__logger.debug('vms parent: {}'.format(vm.parent))
+                    vm_uuid = vm.config.uuid
             except Exception as e:
+                settings.raven.captureException(exc_info=True)
                 self.__logger.warn('pyvmomi related exception: ', exc_info=True)
+                self.__sleep_between_tries()
             if vm:
-                return vm.config.uuid
+                for i in range(retry_deploy_count):
+                    try:
+                        self.vm_folders.move_vm_to_folder(vm_uuid, destination_folder_name)
+                    except vim.fault.DuplicateName as e:
+                        settings.raven.captureException(exc_info=True)
+                        self.__logger.warn(
+                            'destination folder {} not created because; trying again'.format(
+                                destination_folder_name
+                            )
+                        )
+                    except Exception as e:
+                        settings.raven.captureException(exc_info=True)
+                        self.__logger.warn(
+                            'destination folder {} was not created because {}'.format(
+                                destination_folder_name,
+                                e
+                            )
+                        )
+                        self.__sleep_between_tries()
+                        raise e
+
+                return vm_uuid
         raise RuntimeError("virtual machine hasn't been deployed")
 
     def __search_sibling_machines(self, parent_folder, vm_uuid):
@@ -211,31 +245,85 @@ class VCenter():
         self.__logger.debug('searching done')
         return result
 
+    def __has_sibling_machines(self, parent_folder, vm_uuid):
+        self.__logger.debug('searching for sibling machines in: {}({})'.format(
+                                                                                parent_folder,
+                                                                                parent_folder.name
+        ))
+        for rep in range(5):
+            try:
+                objView = self.content.viewManager.CreateContainerView(
+                                                                self.content.rootFolder,
+                                                                [vim.VirtualMachine],
+                                                                True
+                )
+
+                for item in objView.view:
+                    if item.parent == parent_folder and item.config.uuid != vm_uuid:
+                        self.__logger.debug('>>found: {}'.format(item.name))
+                        return True
+                        break
+                return False
+            except vmodl.fault.ManagedObjectNotFound:
+                self.__sleep_between_tries()
+                pass
+            except Exception:
+                settings.raven.captureException(exc_info=True)
+                self.__sleep_between_tries()
+            finally:
+                self.__logger.debug('searching done')
+                objView.Destroy()
+        return True
+
     def undeploy(self, uuid):
         self.__check_connection()
+        for attempt in range(6):
+            try:
+                vm = self.content.searchIndex.FindByUuid(None, uuid, True)
+                if vm:
+                    self.__logger.debug('found vm: {}'.format(vm.config.uuid))
 
-        vm = self.content.searchIndex.FindByUuid(None, uuid, True)
-        if vm:
-            self.__logger.debug('found vm: {}'.format(vm.config.uuid))
-
-            parent_folder = vm.parent
-            sibling_machines = self.__search_sibling_machines(parent_folder, vm.config.uuid)
-
-            task = vm.Destroy_Task()
-            self.wait_for_task(task)
-            self.__logger.debug('vm killed')
-
-            if len(sibling_machines) == 0:
-                self.__logger.debug(
-                    'folder: {}({}) is going to be removed'.format(
-                                                                    parent_folder,
-                                                                    parent_folder.name
+                    parent_folder = vm.parent
+                    parent_folder_name = vm.parent.name
+                    has_sibling_machines = self.__has_sibling_machines(
+                        parent_folder,
+                        vm.config.uuid
                     )
-                )
-                self.vm_folders.delete_folder(parent_folder)
-                self.__logger.debug('folder: deleted')
-        else:
-            raise Exception('machine {} not found'.format(uuid))
+
+                    for i in range(5):
+                        try:
+                            task = vm.Destroy_Task()
+                            self.wait_for_task(task)
+                            self.__logger.debug('vm killed {}'.format(i))
+                            break
+                        except vmodl.fault.ManagedObjectNotFound:
+                            self.__sleep_between_tries()
+
+                    if not has_sibling_machines:
+                        self.__logger.debug(
+                            'folder: {} is going to be removed'.format(
+                                                                    parent_folder_name
+                            )
+                        )
+                        self.vm_folders.delete_folder(parent_folder)
+                        self.__logger.debug('folder: {} has been deleted'.format(
+                            parent_folder_name
+                        )
+                        )
+                    return
+                else:
+                    self.__logger.warn(
+                        'machine {} not found or has been already deleted'.format(uuid)
+                    )
+                    return
+            except vmodl.fault.ManagedObjectNotFound:
+                self.__logger.warn('problem while undeploying machine {}'.format(uuid))
+                self.__sleep_between_tries()
+            except Exception:
+                settings.raven.captureException(exc_info=True)
+                self.__sleep_between_tries()
+
+        raise RuntimeError("virtual machine hasn't been undeployed")
 
     def start(self, uuid):
         self.__check_connection()
@@ -251,43 +339,53 @@ class VCenter():
 
     def stop(self, uuid):
         self.__check_connection()
-
-        vm = self.content.searchIndex.FindByUuid(None, uuid, True)
-        if vm:
-            self.__logger.debug('found vm: {}'.format(vm.config.uuid))
-            task = vm.PowerOffVM_Task()
-            self.wait_for_task(task)
-            self.__logger.debug('vm powered on')
-        else:
-            raise Exception('machine {} not found'.format(uuid))
+        for i in range(settings.app['vsphere']['retries']['config_network']):
+            try:
+                vm = self.content.searchIndex.FindByUuid(None, uuid, True)
+                if vm:
+                    self.__logger.debug('found vm: {}'.format(uuid))
+                    task = vm.PowerOffVM_Task()
+                    self.wait_for_task(task)
+                    self.__logger.debug('vm powered off')
+                    return
+                else:
+                    raise Exception('machine {} not found'.format(uuid))
+            except Exception:
+                settings.raven.captureException(exc_info=True)
+                self.__sleep_between_tries()
 
     def config_network(self, uuid, **kwargs):
         self.__logger.debug('config_network')
         self.__check_connection()
+        for i in range(settings.app['vsphere']['retries']['config_network']):
+            try:
 
-        vm = self.content.searchIndex.FindByUuid(None, uuid, True)
+                vm = self.content.searchIndex.FindByUuid(None, uuid, True)
 
-        for device in vm.config.hardware.device:
-            if type(device) == vim.vm.device.VirtualE1000 or \
-               type(device) == vim.vm.device.VirtualE1000e or \
-               type(device) == vim.vm.device.VirtualPCNet32 or \
-               type(device) == vim.vm.device.VirtualVmxnet or \
-               type(device) == vim.vm.device.VirtualVmxnet2 or \
-               type(device) == vim.vm.device.VirtualVmxnet3:
-                device.backing = vim.vm.device.VirtualEthernetCard.NetworkBackingInfo(
-                    deviceName=kwargs['interface_name']
-                )
+                for device in vm.config.hardware.device:
+                    if type(device) == vim.vm.device.VirtualE1000 or \
+                       type(device) == vim.vm.device.VirtualE1000e or \
+                       type(device) == vim.vm.device.VirtualPCNet32 or \
+                       type(device) == vim.vm.device.VirtualVmxnet or \
+                       type(device) == vim.vm.device.VirtualVmxnet2 or \
+                       type(device) == vim.vm.device.VirtualVmxnet3:
+                        device.backing = vim.vm.device.VirtualEthernetCard.NetworkBackingInfo(
+                            deviceName=kwargs['interface_name']
+                        )
 
-                device_config_spec = vim.VirtualDeviceConfigSpec(
-                    operation=vim.VirtualDeviceConfigSpecOperation('edit'),
-                    device=device
-                )
+                        device_config_spec = vim.VirtualDeviceConfigSpec(
+                            operation=vim.VirtualDeviceConfigSpecOperation('edit'),
+                            device=device
+                        )
 
-                machine_config_spec = vim.vm.ConfigSpec(
-                    deviceChange=[device_config_spec]
-                )
-                task = vm.ReconfigVM_Task(spec=machine_config_spec)
-                self.wait_for_task(task)
+                        machine_config_spec = vim.vm.ConfigSpec(
+                            deviceChange=[device_config_spec]
+                        )
+                        task = vm.ReconfigVM_Task(spec=machine_config_spec)
+                        self.wait_for_task(task)
+                break
+            except Exception:
+                self.__sleep_between_tries()
 
     def get_machine_info(self, uuid):
         self.__check_connection()
@@ -323,44 +421,85 @@ class VCenter():
     class VmFolders:
 
         def __init__(self, parent):
+            # this stores all folders in vsphere at the time the class was instantiated
             self.vm_folders = {}
+            # this stores all subfolders where this lm unit operates
+            self.system_folders = {}
+
             self.__logger = logging.getLogger(__name__)
             self.parent = parent
+            self.__collect_all_folders()
 
-        def create_subfolder(self, path, subpath):
-            self.__logger.debug("A request to create {} in {}".format(subpath, path))
+        def __sleep_between_tries(self):
+            time.sleep(random.uniform(
+                            settings.app['vsphere']['retries']['delay_period_min'],
+                            settings.app['vsphere']['retries']['delay_period_max']
+            )
+            )
+
+        def __get_system_root_folder(self):
+            if not settings.app['vsphere']['folder'] in self.vm_folders:
+                self.__logger.warn('{} not in vm_folders'.format(settings.app['vsphere']['folder']))
+                # self.__logger.warn('{}'.format(self.vm_folders.keys()))
+            folder = self.vm_folders[settings.app['vsphere']['folder']]
+            # self.__logger.debug('folder: {}'.format(folder))
+
             objView = self.parent.content.viewManager.CreateContainerView(
                 self.parent.content.rootFolder,
                 [vim.Folder],
                 True
             )
+
+            try:
+                for item in objView.view:
+                    if str(item) == folder:
+                        return item
+                raise Exception("root folder not obtained")
+            finally:
+                objView.DestroyView()
+
+        def create_subfolder(self, path, subpath):
+            self.__logger.debug("A request to create {} in {}".format(subpath, path))
+            objView = self.parent.content.viewManager.CreateContainerView(
+                # we have to start from parent to fing the current root folder
+                self.__get_system_root_folder().parent,
+                [vim.Folder],
+                True
+            )
+
             new_folder = None
             for item in objView.view:
-                if str(item) == self.vm_folders[path]:
-                    new_folder = item.CreateFolder(name=subpath)
-                    break
+                if str(item) == self.system_folders[path]:
+                    self.__logger.debug('parent folder {} found'.format(path))
+                    try:
+                        new_folder = item.CreateFolder(name=subpath)
+                        break
+                    except vim.fault.DuplicateName:
+                        self.__sleep_between_tries()
+                        break
 
             objView.DestroyView()
-            self.__collect_all_folders()
+            self.__logger.debug("creation done.")
+            self.__collect_system_folders()
             return new_folder
 
         def __obtain_folder(self, path):
             objView = self.parent.content.viewManager.CreateContainerView(
-                self.parent.content.rootFolder,
+                self.__get_system_root_folder(),
                 [vim.Folder],
                 True
             )
             try:
                 for item in objView.view:
-                    if str(item) == self.vm_folders[path]:
+                    if path in self.system_folders and str(item) == self.system_folders[path]:
                         return item
             finally:
                 objView.DestroyView()
 
         def create_folder(self, folder_path):
-            self.__collect_all_folders()
+            self.__collect_system_folders()
             path = self.__correct_folder_format(folder_path)
-            if path in self.vm_folders:
+            if path in self.system_folders:
                 return self.__obtain_folder(path)
 
             created_folder = None
@@ -368,10 +507,12 @@ class VCenter():
             for splitindex in range(2, len(items)):
                 temp_path = '/'.join(items[:splitindex])
                 next_folder = items[splitindex:][0]
-                if temp_path+'/'+next_folder not in self.vm_folders:
+                if temp_path+'/'+next_folder not in self.system_folders:
                     created_folder = self.create_subfolder(temp_path, next_folder)
+                else:
+                    self.__logger.debug('{} exists'.format(temp_path+'/'+next_folder))
 
-            if path not in self.vm_folders:
+            if path not in self.system_folders:
                 self.__logger.warn("Directory {} not created".format(path))
             return self.__obtain_folder(path)
 
@@ -381,35 +522,84 @@ class VCenter():
 
         def move_vm_to_folder(self, vm_uuid, folder_path):
             path = self.__correct_folder_format(folder_path)
-            if path not in self.vm_folders:
+            if path not in self.system_folders:
                 self.create_folder(path)
 
             vm = self.parent.content.searchIndex.FindByUuid(None, vm_uuid, True)
             self.__move_vm_to_existing_folder(vm, path)
 
-        def __collect_all_folders(self):
-            objView = self.parent.content.viewManager.CreateContainerView(
-                self.parent.content.rootFolder,
-                [vim.Folder],
-                True
-            )
+        def __collect_system_folders(self):
+            for repetition in range(5):
+                try:
+                    root_folder_moref = self.__get_system_root_folder()
+                    objView = self.parent.content.viewManager.CreateContainerView(
+                        root_folder_moref,
+                        [vim.Folder],
+                        True
+                    )
 
-            self.__logger.debug("collecting all vm folders....")
-            self.vm_folders = {}
-            for item in objView.view:
-                full_name = self.__retrieve_full_folder_path(item)
-                self.vm_folders[full_name] = str(item)
-            objView.DestroyView()
+                    self.__logger.debug("collecting system vm folders....")
+                    self.system_folders = {
+                        settings.app['vsphere']['folder']: str(root_folder_moref)
+                    }
+                    # all parent folders must be initially added as well
+                    for i in self.vm_folders.keys():
+                        if settings.app['vsphere']['folder'].startswith(i):
+                            self.system_folders[i] = self.vm_folders[i]
+
+                    for item in objView.view:
+                        full_name = self.__retrieve_full_folder_path(item)
+                        self.system_folders[full_name] = str(item)
+                    return
+                except vmodl.fault.ManagedObjectNotFound as e:
+                    self.__logger.warn(
+                        "collect_system_folders errored atempt: {}".format(repetition)
+                    )
+                    self.__sleep_between_tries()
+                except Exception as e:
+                    settings.raven.captureException(exc_info=True)
+                    self.__logger.error(
+                        "collect_system_folders errored atempt: {}".format(repetition)
+                    )
+                    raise e
+                finally:
+                    objView.DestroyView()
+
+        def __collect_all_folders(self):
+            for repetition in range(5):
+                try:
+
+                    objView = self.parent.content.viewManager.CreateContainerView(
+                        self.parent.content.rootFolder,
+                        [vim.Folder],
+                        True
+                    )
+
+                    self.__logger.debug("collecting all vm folders....")
+                    self.vm_folders = {}
+                    for item in objView.view:
+                        full_name = self.__retrieve_full_folder_path(item)
+                        self.vm_folders[full_name] = str(item)
+                    self.__logger.debug("collecting done.")
+                    return
+                except vmodl.fault.ManagedObjectNotFound as e:
+                    self.__logger.warn("collect_all_folders errored atempt: {}".format(repetition))
+                    self.__sleep_between_tries()
+                except Exception as e:
+                    settings.raven.captureException(exc_info=True)
+                    self.__logger.error("collect_all_folders errored atempt: {}".format(repetition))
+                    raise e
+                finally:
+                    objView.DestroyView()
 
         def __move_vm_to_existing_folder(self, vm, existing_path):
             objView2 = self.parent.content.viewManager.CreateContainerView(
-                self.parent.content.rootFolder,
+                self.__get_system_root_folder(),
                 [vim.Folder],
                 True
             )
-
             for item in objView2.view:
-                if str(item) == self.vm_folders[existing_path]:
+                if str(item) == self.system_folders[existing_path]:
                     task = item.MoveIntoFolder_Task(list=[vm])
                     while (task.info.state == 'running' or task.info.state == 'queued'):
                         time.sleep(0.2)

@@ -43,21 +43,20 @@ async def machine_deploy(request):
     check_payload_deploy(request)
 
     with data.Connection.use() as conn:
-        with data.Transaction(conn):
-            new_request = data.Request(state='created', type='deploy')
-            new_request.save(conn=conn)
+        new_request = data.Request(state='created', type='deploy')
+        new_request.save(conn=conn)
 
-            new_machine = data.Machine(
-                labels=request.headers['json_params']['labels'],
-                requests=[new_request.id]
-            )
-            new_machine.save(conn=conn)
+        new_machine = data.Machine(
+            labels=request.headers['json_params']['labels'],
+            requests=[new_request.id]
+        )
+        new_machine.save(conn=conn)
 
-            new_request.machine = str(new_machine.id)
-            new_request.save(conn=conn)
+        new_request.machine = str(new_machine.id)
+        new_request.save(conn=conn)
 
-            # begin machine preparation
-            data.Action(type='deploy', request=new_request.id).save(conn=conn)
+        # begin machine preparation
+        data.Action(type='deploy', request=new_request.id).save(conn=conn)
 
     return {'request_id': '{}'.format(new_request.id)}
 
@@ -80,42 +79,39 @@ async def machine_get_info(request, machine_id):
     logger.debug('Current thread name: {}'. format(threading.current_thread().name))
 
     with data.Connection.use() as conn:
-        with data.Transaction(conn):
-            asyncio.sleep(0.1)
-            machine = data.Machine.get({'_id': machine_id}, conn=conn).first()
-            new_request = data.Request(type='undeploy', machine=str(machine_id))
-            new_request.save(conn=conn)
-            machine.requests.append(new_request.id)
-            machine.save(conn=conn)
-            data.Action(type='other', request=new_request.id).save(conn=conn)
+        asyncio.sleep(0.1)
+        machine = data.Machine.get_one_for_update({'_id': machine_id}, conn=conn)
+        new_request = data.Request(type='undeploy', machine=str(machine_id))
+        new_request.save(conn=conn)
+        machine.requests.append(new_request.id)
+        machine.save(conn=conn)
+        data.Action(type='other', request=new_request.id).save(conn=conn)
 
     return {'request_id': '{}'.format(new_request.id)}
 
 
 async def machine_start(request, machine_id):
     with data.Connection.use() as conn:
-        with data.Transaction(conn):
-            asyncio.sleep(0.1)
-            machine = data.Machine.get({'_id': machine_id}, conn=conn).first()
-            new_request = data.Request(type='start', machine=str(machine_id))
-            new_request.save(conn=conn)
-            machine.requests.append(new_request.id)
-            machine.save(conn=conn)
-            data.Action(type='other', request=new_request.id).save(conn=conn)
+        asyncio.sleep(0.1)
+        machine = data.Machine.get_one_for_update({'_id': machine_id}, conn=conn)
+        new_request = data.Request(type='start', machine=str(machine_id))
+        new_request.save(conn=conn)
+        machine.requests.append(new_request.id)
+        machine.save(conn=conn)
+        data.Action(type='other', request=new_request.id).save(conn=conn)
 
     return {'request_id': '{}'.format(new_request.id)}
 
 
 async def machine_stop(request, machine_id):
     with data.Connection.use() as conn:
-        with data.Transaction(conn):
-            asyncio.sleep(0.1)
-            machine = data.Machine.get({'_id': machine_id}, conn=conn).first()
-            new_request = data.Request(type='stop', machine=str(machine_id))
-            new_request.save(conn=conn)
-            machine.requests.append(new_request.id)
-            machine.save(conn=conn)
-            data.Action(type='other', request=new_request.id).save(conn=conn)
+        asyncio.sleep(0.1)
+        machine = data.Machine.get_one_for_update({'_id': machine_id}, conn=conn)
+        new_request = data.Request(type='stop', machine=str(machine_id))
+        new_request.save(conn=conn)
+        machine.requests.append(new_request.id)
+        machine.save(conn=conn)
+        data.Action(type='other', request=new_request.id).save(conn=conn)
 
     return {'request_id': '{}'.format(new_request.id)}
 
