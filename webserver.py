@@ -20,16 +20,9 @@ if __name__ == '__main__':
                                                     hex(id(loop)),
                                                     threading.current_thread().name
         ))
-
-        data.Connection.connect(
-                                host=settings.app['db']['host'],
-                                authSource=settings.app['db']['database'],
-                                replicaSet=settings.app['db']['replica_set'],
-                                ssl=settings.app['db']['ssl'],
-                                ssl_ca_certs=settings.app['db']['ssl_ca_certs_file'],
-                                username=settings.app['db']['username'],
-                                password=settings.app['db']['password']
-        )
+    data.Connection.connect(
+                            dsn=settings.app['db']['dsn']
+    )
 
     web.lm_unit.lm_unit_webserver.run(
                                         host=settings.app['service']['host'],

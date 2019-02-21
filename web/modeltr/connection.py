@@ -1,5 +1,6 @@
-from pymongo import MongoClient
 from contextlib import contextmanager
+import psycopg2
+from web.settings import Settings as settings
 import logging
 
 DEFAULT_CONNECTION_NAME = 'default'
@@ -7,31 +8,32 @@ DEFAULT_CONNECTION_NAME = 'default'
 
 class Connection(object):
     def __enter__(self):
-        self.session = self.client.start_session()
         return self
 
     def __exit__(self, type, value, traceback):
         if traceback is None:
-            self.__logger.debug('Connection successful')
+            self.client.commit()
+            pass
         else:
-            self.__logger.debug('Exception occurred in Connection')
+            self.client.rollback()
+            self.__logger.warn('Exception occurred in Connection, all changes rolled back')
 
-        self.session.end_session()
-
-    # example usage: web.modeltr.connection.Connection(
-    #   host='localhost', authSource='test_database', replicaSet='rs0')
-    # auth source must be present here
     def __init__(self, **kwargs):
         self.__logger = logging.getLogger(__name__)
-        self.client = MongoClient(**kwargs)
-        self.database = kwargs['authSource']
+        for i in range(settings.app['retries']['db_connection']):
+            try:
+                self.client = psycopg2.connect(kwargs['dsn'])
+                break
+            except psycopg2.OperationalError as e:
+                self.__logger.warn('Error connecting to the db server', exc_info=True)
+                pass
 
     __connections = {}
 
     @classmethod
     def connect(cls, alias=DEFAULT_CONNECTION_NAME, **kwargs):
         if alias not in cls.__connections:
-            cls.__connections[alias] = cls(**kwargs)
+            cls.__connections[alias] = {"connection": cls(**kwargs), "args": kwargs}
         return cls.use(alias)
 
     @classmethod
@@ -42,23 +44,9 @@ class Connection(object):
                     alias
                 )
             )
-        return cls.__connections[alias]
-
-
-class Transaction(object):
-    def __enter__(self):
-        self.transaction = self.conn.session.start_transaction()
-        return self
-
-    def __exit__(self, type, value, traceback):
-        if traceback is None:
-            self.__logger.debug('Transaction successful')
-            self.conn.session.commit_transaction()
-            self.__logger.debug('Transaction has been committed successfully')
-        else:
-            self.conn.session.abort_transaction()
-            self.__logger.debug('Exception occurred during transaction')
-
-    def __init__(self, connection):
-        self.conn = connection
-        self.__logger = logging.getLogger(__name__)
+        connection = cls.__connections[alias]
+        try:
+            connection["connection"].client.reset()
+        except (psycopg2.InterfaceError, psycopg2.OperationalError, psycopg2.DatabaseError) as e:
+            connection["connection"] = cls(**connection["args"])
+        return cls.__connections[alias]["connection"]

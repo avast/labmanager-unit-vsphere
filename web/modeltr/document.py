@@ -1,5 +1,5 @@
-import pymongo
-import bson
+import psycopg2
+import json
 from .base import trString, trList, trId, trSaveTimestamp, trLock
 from .base import __all__ as MODELTR_TYPES_LIST
 import datetime
@@ -23,6 +23,7 @@ class DocumentList(list):
 
 class Document(object):
     id = trId
+    __datetime_format = "%Y-%m-%d %H:%M:%S"
 
     def __init__(self, **kwargs):
         types = {}
@@ -87,50 +88,86 @@ class Document(object):
         raise RuntimeError()
 
     def __save(self, **kwargs):
-        self.__logger.debug('saving document {}'.format(self.id))
+        self.__logger.debug('saving {} {}'.format(type(self).__name__.lower(), self.id))
         # TODO: updated_at must be handled here
         connection = self.__get_connection(**kwargs)
-        result = connection.client[connection.database][self.collection_name].update_one(
-            filter={'_id': bson.objectid.ObjectId(self.id)},
-            update={'$set': self.to_dict()}, session=connection.session
-        )
 
-        self.__logger.debug(
-            'document saved {} => modified_count: {}\t  matched_count: {}\t raw_result: {}'.format(
-                self.id,
-                result.modified_count,
-                result.matched_count,
-                result.raw_result,
-            )
+        cur = connection.client.cursor()
+        self.__logger.debug(self.to_dict())
+        cur.execute(
+                    "update documents set data= %s where id = %s",
+                    [json.dumps(self.to_dict()), self.id]
         )
 
     def __insert(self, **kwargs):
         connection = self.__get_connection(**kwargs)
-        collection = connection.client[connection.database][self.collection_name]
-        result = collection.insert_one(self.to_dict(), session=connection.session)
-        self.id = str(result.inserted_id)
+
+        cur = connection.client.cursor()
+        self.__logger.debug(self.to_dict())
+        cur.execute(
+                    "insert into documents (type, data) VALUES(%s,%s) returning id;",
+                    [type(self).__name__.lower(), json.dumps(self.to_dict())]
+        )
+        returning_id = cur.fetchone()[0]
+        self.id = str(returning_id)
 
     def to_dict(self):
         result = {}
         for prop, typ in self.__types.items():
-            if prop != 'id':
+            if prop == 'id':
+                continue
+            if isinstance(getattr(self, prop), type(datetime.datetime.now())):
+                result.update({prop: getattr(self, prop).strftime(self.__datetime_format)})
+            else:
                 result.update({prop: getattr(self, prop)})
         return result
 
-    @classmethod
-    def __fix_query(cls, query):
-        new_query = {}
-        for key, val in query.items():
-            new_query[key] = val if key != '_id' else bson.objectid.ObjectId(val)
-        return new_query
+#    @classmethod
+#    def __fix_query(cls, query):
+#        new_query = {}
+#        for key, val in query.items():
+#            new_query[key] = val if key != '_id' else bson.objectid.ObjectId(val)
+#        return new_query
+
+#    @classmethod
+#    def _db_record_to_instance(cls, record):
+#        new_document = cls(id=str(record['_id']))
+#        for prop in record.keys():
+#            if prop != '_id':
+#                setattr(new_document, prop, record[prop])
+#        return new_document
 
     @classmethod
-    def _db_record_to_instance(cls, record):
-        new_document = cls(id=str(record['_id']))
-        for prop in record.keys():
-            if prop != '_id':
-                setattr(new_document, prop, record[prop])
+    def _db_record_to_instance_pq(cls, record):
+        # print(record)
+        new_document = cls(id=str(record[0]))
+        for prop in record[2].keys():
+            if isinstance(datetime.datetime.now(), new_document.__types[prop]):
+                setattr(
+                        new_document,
+                        prop,
+                        datetime.datetime.strptime(record[2][prop], cls.__datetime_format)
+                )
+            else:
+                setattr(new_document, prop, record[2][prop])
         return new_document
+
+    @classmethod
+    def construct_query(cls, query):
+        collection_name = cls.__name__.lower()
+        sql_query = "SELECT * FROM documents where "
+        params = []
+        for key, val in query.items():
+            if key == "_id":
+                sql_query += " id = %s and "
+                params += [str(val)]
+            else:
+                sql_query += " data::json->>%s = %s and "
+                params += [key, str(val)]
+
+        sql_query += " type = %s "
+        params += [collection_name]
+        return [sql_query, params]
 
     @classmethod
     def get(cls, query, **kwargs):
@@ -139,12 +176,67 @@ class Document(object):
             raise ValueError('parameter conn must be specified')
         connection = kwargs['conn']
 
-        collection = connection.client[connection.database][collection_name]
-        cresult = collection.find(cls.__fix_query(query), session=connection.session)
         result = DocumentList()
-        for item in cresult:
-            result.append(cls._db_record_to_instance(item))
+        cur = connection.client.cursor()
+        sql_query = cls.construct_query(query)
+        cur.execute(sql_query[0], sql_query[1])
+        # cur.execute("SELECT * FROM documents where id = %s;",[query["_id"]])
+        if cur.rowcount == 0:
+            print(cur.rowcount)
+            print(cur.query)
+        for item in cur.fetchall():
+            result.append(cls._db_record_to_instance_pq(item))
         return result
+
+        # collection = connection.client[connection.database][collection_name]
+        # cresult = collection.find(cls.__fix_query(query), session=connection.session)
+        # result = DocumentList()
+        # for item in cresult:
+        #     result.append(cls._db_record_to_instance(item))
+        # return result
+
+    @classmethod
+    def __get_one_custom(cls, query, extend, **kwargs):
+        collection_name = cls.__name__.lower()
+        if 'conn' not in kwargs:
+            raise ValueError('parameter conn must be specified')
+        connection = kwargs['conn']
+
+        cur = connection.client.cursor()
+        sql_query = cls.construct_query(query)
+        cur.execute(sql_query[0] + " " + extend, sql_query[1])
+        if cur.rowcount == 0:
+            return None
+        else:
+            return cls._db_record_to_instance_pq(cur.fetchone())
+
+    @classmethod
+    def get_one(cls, query, **kwargs):
+        return cls.__get_one_custom(query, "LIMIT 1;", **kwargs)
+
+    @classmethod
+    def get_one_for_update(cls, query, **kwargs):
+        return cls.__get_one_custom(query, "LIMIT 1 FOR UPDATE;", **kwargs)
+
+    @classmethod
+    def get_one_for_update_nowait(cls, query, **kwargs):
+        try:
+            return cls.__get_one_custom(query, "LIMIT 1 FOR UPDATE NOWAIT;", **kwargs)
+        except psycopg2.OperationalError as e:
+            self.__logger.error('OperationalError while processing request: ', exc_info=True)
+            return None
+
+    @classmethod
+    def get_one_for_update_skip_locked(cls, query, **kwargs):
+        try:
+            return cls.__get_one_custom(
+                            query,
+                            "ORDER BY ID LIMIT 1 FOR UPDATE SKIP LOCKED;",
+                            **kwargs
+            )
+        except psycopg2.OperationalError as e:
+            self.__logger.error('OperationalError while processing request: ', exc_info=True)
+            return None
 
     @classmethod
     def get_lock_field(cls):
@@ -164,14 +256,18 @@ class Document(object):
             raise ValueError('query must be a dictionary')
 
         # get the lock field, only one such field can be present in the model
-        cresult = connection.client[connection.database][collection_name].find_one_and_update(
-            cls.__fix_query(query),
-            {'$inc': {cls.get_lock_field(): 1}},
-            sort=[('_id', -1)],
-            upsert=False,
-            session=connection.session
-        )
-        if cresult is None or '_id' not in cresult:
+        lock_field = cls.get_lock_field()
+
+        cur = connection.client.cursor()
+        sql_query = cls.construct_query(query)
+        cur.execute(sql_query[0] + " ORDER BY ID LIMIT 1 FOR UPDATE SKIP LOCKED;", sql_query[1])
+        result = cur.fetchone()
+        if result is None:
             return None
 
-        return cls._db_record_to_instance(cresult)
+        # update lock field
+        doc = cls._db_record_to_instance_pq(result)
+        setattr(doc, lock_field, getattr(doc, lock_field) + 1)
+        doc.save(conn=connection)
+
+        return doc

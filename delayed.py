@@ -2,43 +2,49 @@
 
 from web.settings import Settings as settings
 import logging
-
 import datetime
-
 import threading
 import re
 import time
 import os
 import sys
 import web.modeltr as data
-
+import signal
 
 logger = logging.getLogger(__name__)
+
+
+def signal_handler(signum, frame):
+    global process_actions
+    logger.info('worker aborted by signal: {}'.format(signum))
+    process_actions = False
+
 
 if __name__ == '__main__':
 
     data.Connection.connect(
                             'conn2',
-                            host=settings.app['db']['host'],
-                            authSource=settings.app['db']['database'],
-                            replicaSet=settings.app['db']['replica_set'],
-                            ssl=settings.app['db']['ssl'],
-                            ssl_ca_certs=settings.app['db']['ssl_ca_certs_file'],
-                            username=settings.app['db']['username'],
-                            password=settings.app['db']['password']
+                            dsn=settings.app['db']['dsn']
     )
 
-    idle_counter = 0
-    with data.Connection.use('conn2') as conn:
-        while True:
+    signal.signal(signal.SIGTERM, signal_handler)
+    signal.signal(signal.SIGINT, signal_handler)
+
+    process_actions = True
+    while process_actions:
+        with data.Connection.use('conn2') as conn:
+            time.sleep(1.5)
             try:
                 now = datetime.datetime.now()
-                actions = data.Action.get({'lock': 1}, conn=conn)
-                for action in actions:
-                    if action.next_try < now:
+                action = data.Action.get_one_for_update_skip_locked({'lock': 1}, conn=conn)
+                if action and action.next_try < now:
+                    if True:
                         if action.repetitions == 0:
                             logger.info('action {} timeouted'.format(action.id))
-                            request = data.Request.get({'_id': action.request}, conn=conn).first()
+                            request = data.Request.get_one_for_update(
+                                                                        {'_id': action.request},
+                                                                        conn=conn
+                            )
                             request.state = 'timeouted'
                             request.save(conn=conn)
                             action.lock = -1
@@ -52,10 +58,11 @@ if __name__ == '__main__':
                                                                 month=1,
                                                                 day=1
                             )
-
                             action.save(conn=conn)
                             logger.debug('firing done: {}'.format(action.id))
+
             except Exception:
+                settings.raven.captureException(exc_info=True)
                 logger.error('Exception while processing request: ', exc_info=True)
 
-            time.sleep(5)
+    logger.debug("Delayed finished")
