@@ -92,22 +92,24 @@ class Document(object):
         # TODO: updated_at must be handled here
         connection = self.__get_connection(**kwargs)
 
-        cur = connection.client.cursor()
+        cur = connection.get_cursor()
         self.__logger.debug(self.to_dict())
         cur.execute(
                     "update documents set data= %s where id = %s",
                     [json.dumps(self.to_dict()), self.id]
         )
+        connection.wait_for_completion()
 
     def __insert(self, **kwargs):
         connection = self.__get_connection(**kwargs)
 
-        cur = connection.client.cursor()
+        cur = connection.get_cursor()
         self.__logger.debug(self.to_dict())
         cur.execute(
                     "insert into documents (type, data) VALUES(%s,%s) returning id;",
                     [type(self).__name__.lower(), json.dumps(self.to_dict())]
         )
+        connection.wait_for_completion()
         returning_id = cur.fetchone()[0]
         self.id = str(returning_id)
 
@@ -177,9 +179,11 @@ class Document(object):
         connection = kwargs['conn']
 
         result = DocumentList()
-        cur = connection.client.cursor()
         sql_query = cls.construct_query(query)
+
+        cur = connection.get_cursor()
         cur.execute(sql_query[0], sql_query[1])
+        connection.wait_for_completion()
         # cur.execute("SELECT * FROM documents where id = %s;",[query["_id"]])
         if cur.rowcount == 0:
             print(cur.rowcount)
@@ -202,9 +206,11 @@ class Document(object):
             raise ValueError('parameter conn must be specified')
         connection = kwargs['conn']
 
-        cur = connection.client.cursor()
         sql_query = cls.construct_query(query)
+
+        cur = connection.get_cursor()
         cur.execute(sql_query[0] + " " + extend, sql_query[1])
+        connection.wait_for_completion()
         if cur.rowcount == 0:
             return None
         else:
@@ -258,9 +264,12 @@ class Document(object):
         # get the lock field, only one such field can be present in the model
         lock_field = cls.get_lock_field()
 
-        cur = connection.client.cursor()
+        cur = connection.get_cursor()
+
         sql_query = cls.construct_query(query)
         cur.execute(sql_query[0] + " ORDER BY ID LIMIT 1 FOR UPDATE SKIP LOCKED;", sql_query[1])
+        connection.wait_for_completion()
+
         result = cur.fetchone()
         if result is None:
             return None
