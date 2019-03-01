@@ -21,7 +21,8 @@ if __name__ == '__main__':
                                                     threading.current_thread().name
         ))
     data.Connection.connect(
-                            dsn=settings.app['db']['dsn']
+                            dsn=settings.app['db']['dsn'],
+                            async_mode=True
     )
 
     web.lm_unit.lm_unit_webserver.run(

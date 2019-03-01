@@ -69,7 +69,6 @@ async def machine_get_info(request, machine_id):
         asyncio.sleep(0.1)
         req = data.Machine.get({'_id': machine_id}, conn=conn).first()
         rr = req.to_dict()
-        del rr['modified_at']
 
     return sanic.response.text(json.dumps(rr))
 
