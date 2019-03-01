@@ -124,7 +124,7 @@ class VCenter():
                     )
 
         task = template.CloneVM_Task(
-                        destination_folder if destination_folder else template.parent,
+                        destination_folder,
                         machine_name,
                         spec
                     )
@@ -225,28 +225,8 @@ class VCenter():
                 return vm_uuid
         raise RuntimeError("virtual machine hasn't been deployed")
 
-    def __search_sibling_machines(self, parent_folder, vm_uuid):
-        result = []
-        self.__logger.debug('searching for sibling machines in: {}({})'.format(
-                                                                                parent_folder,
-                                                                                parent_folder.name
-        ))
-        objView = self.content.viewManager.CreateContainerView(
-                                                                self.content.rootFolder,
-                                                                [vim.VirtualMachine],
-                                                                True
-        )
-
-        for item in objView.view:
-            if item.parent == parent_folder and item.config.uuid != vm_uuid:
-                self.__logger.debug('>>found: {}'.format(item.name))
-                result.append(item)
-        objView.Destroy()
-        self.__logger.debug('searching done')
-        return result
-
-    def __has_sibling_machines(self, parent_folder, vm_uuid):
-        self.__logger.debug('searching for sibling machines in: {}({})'.format(
+    def __has_sibling_objects(self, parent_folder, vm_uuid):
+        self.__logger.debug('are there sibling machines in: {}({})?'.format(
                                                                                 parent_folder,
                                                                                 parent_folder.name
         ))
@@ -254,15 +234,18 @@ class VCenter():
             try:
                 objView = self.content.viewManager.CreateContainerView(
                                                                 self.content.rootFolder,
-                                                                [vim.VirtualMachine],
+                                                                [vim.VirtualMachine, vim.Folder],
                                                                 True
                 )
 
                 for item in objView.view:
-                    if item.parent == parent_folder and item.config.uuid != vm_uuid:
-                        self.__logger.debug('>>found: {}'.format(item.name))
-                        return True
-                        break
+                    if item.parent == parent_folder:
+                        if isinstance(item, vim.Folder):
+                            self.__logger.debug('>>found folder: {}'.format(item.name))
+                            return True
+                        if item.config.uuid != vm_uuid:
+                            self.__logger.debug('>>found vm: {}'.format(item.name))
+                            return True
                 return False
             except vmodl.fault.ManagedObjectNotFound:
                 self.__sleep_between_tries()
@@ -285,10 +268,12 @@ class VCenter():
 
                     parent_folder = vm.parent
                     parent_folder_name = vm.parent.name
-                    has_sibling_machines = self.__has_sibling_machines(
-                        parent_folder,
-                        vm.config.uuid
-                    )
+                    has_sibling_machines = True
+                    # has_sibling_machines = self.__has_sibling_objects(
+                    #    has_sibling_machines = True
+                    #    parent_folder,
+                    #    vm.config.uuid
+                    # )
 
                     for i in range(5):
                         try:
@@ -485,7 +470,7 @@ class VCenter():
 
         def __obtain_folder(self, path):
             objView = self.parent.content.viewManager.CreateContainerView(
-                self.__get_system_root_folder(),
+                self.__get_system_root_folder().parent,
                 [vim.Folder],
                 True
             )
@@ -495,6 +480,8 @@ class VCenter():
                         return item
             finally:
                 objView.DestroyView()
+
+            self.__logger.warn("folder: {} not found".format(path))
 
         def create_folder(self, folder_path):
             self.__collect_system_folders()
@@ -539,6 +526,7 @@ class VCenter():
                     )
 
                     self.__logger.debug("collecting system vm folders....")
+                    self.__logger.debug("\troot_folder_moref: {}".format(str(root_folder_moref)))
                     self.system_folders = {
                         settings.app['vsphere']['folder']: str(root_folder_moref)
                     }
@@ -550,6 +538,7 @@ class VCenter():
                     for item in objView.view:
                         full_name = self.__retrieve_full_folder_path(item)
                         self.system_folders[full_name] = str(item)
+
                     return
                 except vmodl.fault.ManagedObjectNotFound as e:
                     self.__logger.warn(

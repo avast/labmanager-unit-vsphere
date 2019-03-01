@@ -251,4 +251,4 @@ if __name__ == '__main__':
                 action.save(conn=conn)
 
     logger.debug("Worker finished")
-    time.sleep(2)
+    time.sleep(1)
