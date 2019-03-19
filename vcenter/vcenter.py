@@ -391,9 +391,17 @@ class VCenter():
 
     def wait_for_task(self, task):
         while (task.info.state == 'running' or task.info.state == 'queued'):
+            message = "no-message"
+            progress = "n/a"
+            try:
+                progress = task.info.progress
+                message = task.info.description.message
+            except Exception:
+                self.__logger.warn('Problem obtaining progress or description on a vsphere task')
+
             self.__logger.debug('Progress {}% | Task: {}\r'.format(
-                task.info.progress,
-                task.info.description.message if task.info.description else 'unnamed'
+                progress,
+                message
             ))
             time.sleep(1)
         self.__logger.debug('Task finished with status: {}, return value: {}'.format(
