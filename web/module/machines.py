@@ -35,7 +35,9 @@ async def obtain_request(request):
 
 @machines.exception(sanic.exceptions.InvalidUsage)
 def handle_exceptions(request, exception):
-    return sjson({'error': ''.join(exception.args)}, status=exception.status_code)
+    return {
+            'exception': ''.join(exception.args),
+    }
 
 
 @machines.route('/machines', methods=['POST'])
@@ -58,7 +60,10 @@ async def machine_deploy(request):
         # begin machine preparation
         data.Action(type='deploy', request=new_request.id).save(conn=conn)
 
-    return {'request_id': '{}'.format(new_request.id)}
+    return {
+            'request_id': '{}'.format(new_request.id),
+            'is_last': False
+    }
 
 
 @machines.route('/machines/<machine_id>', methods=['GET'])
@@ -68,9 +73,13 @@ async def machine_get_info(request, machine_id):
     with data.Connection.use() as conn:
         asyncio.sleep(0.1)
         req = data.Machine.get({'_id': machine_id}, conn=conn).first()
-        rr = req.to_dict()
+        result = req.to_dict()
+    del result['modified_at']
 
-    return sanic.response.text(json.dumps(rr))
+    return {
+            'result': result,
+            'is_last': True
+    }
 
 
 @machines.route('/machines/<machine_id>', methods=['DELETE'])
@@ -86,7 +95,10 @@ async def machine_get_info(request, machine_id):
         machine.save(conn=conn)
         data.Action(type='other', request=new_request.id).save(conn=conn)
 
-    return {'request_id': '{}'.format(new_request.id)}
+    return {
+            'request_id': '{}'.format(new_request.id),
+            'is_last': False
+    }
 
 
 async def machine_start(request, machine_id):
@@ -99,7 +111,10 @@ async def machine_start(request, machine_id):
         machine.save(conn=conn)
         data.Action(type='other', request=new_request.id).save(conn=conn)
 
-    return {'request_id': '{}'.format(new_request.id)}
+    return {
+            'request_id': '{}'.format(new_request.id),
+            'is_last': False
+    }
 
 
 async def machine_stop(request, machine_id):
@@ -112,7 +127,10 @@ async def machine_stop(request, machine_id):
         machine.save(conn=conn)
         data.Action(type='other', request=new_request.id).save(conn=conn)
 
-    return {'request_id': '{}'.format(new_request.id)}
+    return {
+            'request_id': '{}'.format(new_request.id),
+            'is_last': False
+    }
 
 
 @machines.route('/machines/<machine_id>', methods=['PUT'])
