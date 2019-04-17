@@ -11,6 +11,8 @@ class Settings:
             'log_level': 'DEBUG',
             'log_format': '%(asctime)s %(thread)d %(threadName)s %(levelname)s: %(message)s',
             'log_datefmt': '%Y-%m-%dT%H:%M:%S.000Z',
+            'labels': [],
+            'slot_limit': 5,
 
             'raven': {
                 'dsn': 'fake:dsn@fakehost.com/fake'

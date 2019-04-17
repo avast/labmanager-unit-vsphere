@@ -13,10 +13,12 @@ class Machine(Document):
     provider_id = trString
     requests = trList
     ip_addresses = trList
+    nos_id = trString
 
     _defaults = {
                     'state': 'created',
                     'unit': settings.app['unit_name'],
                     'labels': [],
-                    'ip_addresses': []
+                    'ip_addresses': [],
+                    'nos_id': ''
                 }

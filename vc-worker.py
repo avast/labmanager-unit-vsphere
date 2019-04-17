@@ -58,6 +58,7 @@ def action_deploy(conn, action, vc):
         template = get_template(machine_ro.labels)
         network_interface = get_network_interface(machine_ro.labels)
         inventory_folder = get_inventory_folder(machine_ro.labels)
+        machine_info = {'nos_id': ''}
 
         try:
             uuid = vc.deploy(
@@ -67,13 +68,20 @@ def action_deploy(conn, action, vc):
                             )
             if network_interface:
                 vc.config_network(uuid, interface_name=network_interface)
+            machine_info = vc.get_machine_info(uuid)
         except Exception as e:
             settings.raven.captureException(exc_info=True)
             logger.info('Exception deploying machine: ', exc_info=True)
             raise e
+        if machine_info['nos_id'] == '' or machine_info['nos_id'] is None:
+            vc.stop(uuid)
+            vc.undeploy(uuid)
+            raise "NOS id hasn't been returned for machine {}" + \
+                ", it is essential to be obtained".format(uuid)
 
         machine = data.Machine.get_one_for_update({'_id': request.machine}, conn=conn)
         machine.provider_id = uuid
+        machine.nos_id = machine_info['nos_id']
         request.state = 'success'
         request.save(conn=conn)
         machine.state = 'deployed'
@@ -144,15 +152,17 @@ def action_others(conn, action, vc):
                 logger.debug(info)
             except Exception:
                 logger.error('get_info exception: ', exc_info=True)
-                info = {'ip_addresses': []}
+                info = {'ip_addresses': [], 'nos_id': ''}
 
+            machine = data.Machine.get_one_for_update({'_id': request.machine}, conn=conn)
+            machine.nos_id = info['nos_id']
             if len(info['ip_addresses']) != 0:
-                machine = data.Machine.get_one_for_update({'_id': request.machine}, conn=conn)
                 machine.ip_addresses = info['ip_addresses']
                 machine.save(conn=conn)
                 request.state = 'success'
                 action.lock = -1
             else:
+                machine.save(conn=conn)
                 request.state = 'delayed'
                 action.repetitions -= 1
                 action.next_try = datetime.datetime.now() + datetime.timedelta(

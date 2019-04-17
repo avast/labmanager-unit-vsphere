@@ -372,20 +372,44 @@ class VCenter():
             except Exception:
                 self.__sleep_between_tries()
 
+    def _get_machine_nos_id(self, vm, uuid):
+        result = ''
+        try:
+            for hw in vm.config.hardware.device:
+                try:
+                    mac = hw.macAddress
+                    result = "v{}".format(re.sub(':', '', str(mac).upper()))
+                except AttributeError:
+                    pass
+        except Exception:
+            self.__logger.debug("obtaining nos_id on machine {} failed".format(uuid), exc_info=True)
+        finally:
+            return result
+
+    def _get_machine_ips(self, vm, uuid):
+        result = []
+        try:
+            for adapter in vm.guest.net:
+                for ip in adapter.ipConfig.ipAddress:
+                    result.append(ip.ipAddress)
+        except Exception:
+            self.__logger.debug("obtaining ips on machine {} failed".format(uuid), exc_info=True)
+        finally:
+            return result
+
     def get_machine_info(self, uuid):
         self.__check_connection()
-        result = {'ip_addresses': []}
+        result = {'ip_addresses': [], 'nos_id': ''}
 
         vm = self.content.searchIndex.FindByUuid(None, uuid, True)
         try:
             if vm:
-                self.__logger.debug('found vm: {}'.format(vm.config.uuid))
-                for adapter in vm.guest.net:
-                    for ip in adapter.ipConfig.ipAddress:
-                        result['ip_addresses'].append(ip.ipAddress)
+                self.__logger.debug('found vm: {}'.format(uuid))
+                result['ip_addresses'] = self._get_machine_ips(vm, uuid)
+                result['nos_id'] = self._get_machine_nos_id(vm, uuid)
                 self.__logger.debug('get machine info end')
         except Exception:
-            self.__logger.debug('get machine info failed')
+            self.__logger.debug('get machine info on {} failed'.format(uuid), exc_info=True)
         finally:
             return result
 

@@ -1,4 +1,9 @@
 language: python
+cache:
+  directories:
+    $HOME/.cache/pipenv
+    .venv
+
 python:
   - "3.6"
   - "3.7-dev"
@@ -26,7 +31,7 @@ before_install:
 
 install:
   - if test "${OS_TYPE}" == 'ubuntu' ; then pip install pipenv; fi
-  - if test "${OS_TYPE}" == 'ubuntu' ; then PIPENV_IGNORE_VIRTUALENVS=1 pipenv install --dev; fi
+  - if test "${OS_TYPE}" == 'ubuntu' ; then PIPENV_VENV_IN_PROJECT=1 PIPENV_IGNORE_VIRTUALENVS=1 pipenv install --dev; fi
 
 before_script:
   - cp config/lm-unit.yaml.example config/lm-unit.yaml
@@ -44,6 +49,6 @@ before_script:
 
 script:
   - if test "${OS_TYPE}" == 'centos' ; then sudo docker run -v `pwd`:/test -t centos:centos7 bash /test/test_centos.sh; fi
-  - if test "${OS_TYPE}" == 'ubuntu' ; then PIPENV_IGNORE_VIRTUALENVS=1 pipenv run mamba; fi
-  - if test "${OS_TYPE}" == 'ubuntu' ; then PIPENV_IGNORE_VIRTUALENVS=1 pipenv run pycodestyle `find . -name '*.py' | grep -v \.venv`; fi
+  - if test "${OS_TYPE}" == 'ubuntu' ; then PIPENV_VENV_IN_PROJECT=1 PIPENV_IGNORE_VIRTUALENVS=1 pipenv run mamba; fi
+  - if test "${OS_TYPE}" == 'ubuntu' ; then PIPENV_VENV_IN_PROJECT=1 PIPENV_IGNORE_VIRTUALENVS=1 pipenv run pycodestyle `find . -name '*.py' | grep -v \.venv`; fi
 
