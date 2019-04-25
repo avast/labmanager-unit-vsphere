@@ -19,7 +19,7 @@ requests = Blueprint('requests')
 
 @requests.route('/requests/<req_id>', methods=['GET'])
 async def req_get_info(request, req_id):
-    logger.debug('Current thread name: {}'. format(threading.current_thread().name))
+    # logger.debug('Current thread name: {}'. format(threading.current_thread().name))
 
     with data.Connection.use() as conn:
         asyncio.sleep(0.1)
