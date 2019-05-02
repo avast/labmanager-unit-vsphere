@@ -7,4 +7,5 @@ logger = logging.getLogger()
 
 
 async def obtain_request(request):
-    logger.debug('request obtained {}'.format(request))
+    # logger.debug('request obtained {}'.format(request))
+    pass
