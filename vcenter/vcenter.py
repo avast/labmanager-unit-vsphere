@@ -397,6 +397,15 @@ class VCenter():
         finally:
             return result
 
+    def _get_machine_name(self, vm, uuid):
+        result = "unknown"
+        for i in range(settings.app['vsphere']['retries']['default']):
+            try:
+                result = vm.config.name
+            except Exception:
+                self.__logger.debug("obtaining machine name {} failed".format(uuid), exc_info=True)
+        return result
+
     def get_machine_info(self, uuid):
         self.__check_connection()
         result = {'ip_addresses': [], 'nos_id': ''}
@@ -407,6 +416,7 @@ class VCenter():
                 self.__logger.debug('found vm: {}'.format(uuid))
                 result['ip_addresses'] = self._get_machine_ips(vm, uuid)
                 result['nos_id'] = self._get_machine_nos_id(vm, uuid)
+                result['machine_name'] = self._get_machine_name(vm, uuid)
                 self.__logger.debug('get machine info end')
         except Exception:
             self.__logger.debug('get machine info on {} failed'.format(uuid), exc_info=True)

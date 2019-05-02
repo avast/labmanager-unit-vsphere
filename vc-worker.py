@@ -82,6 +82,7 @@ def action_deploy(conn, action, vc):
         machine = data.Machine.get_one_for_update({'_id': request.machine}, conn=conn)
         machine.provider_id = uuid
         machine.nos_id = machine_info['nos_id']
+        machine.machine_name = machine_info['machine_name']
         request.state = 'success'
         request.save(conn=conn)
         machine.state = 'deployed'
