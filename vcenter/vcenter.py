@@ -48,10 +48,79 @@ class VCenter():
         self.content = si.content
         self._connected = True
         self.vm_folders = VCenter.VmFolders(self)
+        self.destination_datastore = None
+        self.refresh_destination_datastore()
 
     def idle(self):
         self.__check_connection()
         self.__logger.debug('keeping connection alive: {}'.format(self.content.about.vendor))
+
+    def refresh_destination_datastore(self):
+        self.destination_datastore = self.__get_destination_datastore()
+
+    def __get_destination_datastore(self):
+        self.__logger.debug('Getting destination datastores...')
+        try:
+            objView = self.content.viewManager.CreateContainerView(
+                                                                       self.content.rootFolder,
+                                                                       [vim.StoragePod],
+                                                                       True
+                )
+
+            wanted_name = settings.app['vsphere']['storage']
+            sp = next((item for item in objView.view if item.name == wanted_name), None)
+            if sp:
+                self.__logger.debug('found datastore cluster: {} {}'.format(sp.name, sp))
+                freespace = 0
+                output_ds = None
+                for ds in sp.childEntity:
+                    ds_freespace = ds.summary.freeSpace/1024/1024/1024
+                    self.__logger.debug(
+                        'inspected datastore: {}, {:.2f} GiB left'.format(ds.name, ds_freespace)
+                    )
+                    if ds.summary.accessible and ds_freespace > freespace:
+                        freespace = ds_freespace
+                        output_ds = ds
+                self.__logger.debug(
+                    'selected datastore: {}, {:.2f} GiB left'.format(output_ds.name, freespace)
+                )
+                self.__logger.debug('Getting done')
+                return output_ds
+
+        except vmodl.fault.ManagedObjectNotFound:
+            self.__logger.warn('vmodl.fault.ManagedObjectNotFound has occured')
+        except Exception:
+            settings.raven.captureException(exc_info=True)
+        finally:
+            objView.Destroy()
+
+        # search for datastore name
+        try:
+            objView = self.content.viewManager.CreateContainerView(
+                                                                       self.content.rootFolder,
+                                                                       [vim.Datastore],
+                                                                       True
+                )
+
+            wanted_name = settings.app['vsphere']['storage']
+            sp = next((item for item in objView.view if item.name == wanted_name), None)
+            if sp and sp.summary.accessible:
+                self.__logger.debug(
+                    'selected datastore: {}, {:.2f} GiB left'.format(
+                        sp.name,
+                        sp.summary.freeSpace/1024/1024/1024
+                    )
+                )
+                return sp
+            return None
+
+        except vmodl.fault.ManagedObjectNotFound:
+            self.__logger.warn('vmodl.fault.ManagedObjectNotFound has occured')
+        except Exception:
+            settings.raven.captureException(exc_info=True)
+        finally:
+            objView.Destroy()
+            self.__logger.debug('Getting done')
 
     def __sleep_between_tries(self):
         time.sleep(random.uniform(
@@ -110,10 +179,13 @@ class VCenter():
                                                     snapshot_name
                     )
 
+        sys_dest_ds = self.destination_datastore
+        dest_datastore = template.datastore[0] if sys_dest_ds is None else sys_dest_ds
+
         # for full clone, use 'moveAllDiskBackingsAndDisallowSharing'
         spec = vim.vm.CloneSpec(
                         location=vim.vm.RelocateSpec(
-                            datastore=template.datastore[0],
+                            datastore=dest_datastore,
                             diskMoveType='createNewChildDiskBacking',
                             host=template.runtime.host,
                             transform=vim.vm.RelocateSpec.Transformation.sparse

@@ -48,7 +48,8 @@ class Settings:
             'worker': {
                 'idle_counter': 60,
                 'loop_initial_sleep': 0.5,
-                'loop_idle_sleep': 1.5
+                'loop_idle_sleep': 1.5,
+                'load_refresh_interval': 5  # in number of deployed machines
             }
           }
 
