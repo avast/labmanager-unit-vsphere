@@ -50,6 +50,7 @@ class VCenter():
         self.vm_folders = VCenter.VmFolders(self)
         self.destination_datastore = None
         self.refresh_destination_datastore()
+        self.refresh_destination_resource_pool()
 
     def idle(self):
         self.__check_connection()
@@ -57,6 +58,9 @@ class VCenter():
 
     def refresh_destination_datastore(self):
         self.destination_datastore = self.__get_destination_datastore()
+
+    def refresh_destination_resource_pool(self):
+        self.destination_resource_pool = self.__get_destination_resource_pool()
 
     def __get_destination_datastore(self):
         self.__logger.debug('Getting destination datastores...')
@@ -122,6 +126,31 @@ class VCenter():
             objView.Destroy()
             self.__logger.debug('Getting done')
 
+    def __get_destination_resource_pool(self):
+        self.__logger.debug('Getting destination resource pool...')
+        try:
+            objView = self.content.viewManager.CreateContainerView(
+                                                                       self.content.rootFolder,
+                                                                       [vim.ResourcePool],
+                                                                       True
+                )
+
+            wanted_name = settings.app['vsphere']['resource_pool']
+            sp = next((item for item in objView.view if item.name == wanted_name), None)
+            if sp:
+                self.__logger.debug('found resource pool: {} {}'.format(sp.name, sp))
+                return sp
+
+        except vmodl.fault.ManagedObjectNotFound:
+            self.__logger.warn('vmodl.fault.ManagedObjectNotFound has occured')
+        except Exception:
+            settings.raven.captureException(exc_info=True)
+        finally:
+            objView.Destroy()
+            self.__logger.debug('Getting done')
+
+        return None
+
     def __sleep_between_tries(self):
         time.sleep(random.uniform(
                         settings.app['vsphere']['retries']['delay_period_min'],
@@ -183,13 +212,22 @@ class VCenter():
         dest_datastore = template.datastore[0] if sys_dest_ds is None else sys_dest_ds
 
         # for full clone, use 'moveAllDiskBackingsAndDisallowSharing'
+        if self.destination_resource_pool:
+            relocate_spec = vim.vm.RelocateSpec(
+                datastore=dest_datastore,
+                diskMoveType='createNewChildDiskBacking',
+                pool=self.destination_resource_pool,
+                transform=vim.vm.RelocateSpec.Transformation.sparse
+            )
+        else:
+            relocate_spec = vim.vm.RelocateSpec(
+                datastore=dest_datastore,
+                diskMoveType='createNewChildDiskBacking',
+                host=template.runtime.host,
+                transform=vim.vm.RelocateSpec.Transformation.sparse
+            )
         spec = vim.vm.CloneSpec(
-                        location=vim.vm.RelocateSpec(
-                            datastore=dest_datastore,
-                            diskMoveType='createNewChildDiskBacking',
-                            host=template.runtime.host,
-                            transform=vim.vm.RelocateSpec.Transformation.sparse
-                        ),
+                        location=relocate_spec,
                         powerOn=False,
                         snapshot=snap,
                         template=False,

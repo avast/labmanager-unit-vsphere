@@ -248,6 +248,7 @@ if __name__ == '__main__':
                         if actions_counter > settings.app['worker']['load_refresh_interval']:
                             actions_counter = 0
                             vc.refresh_destination_datastore()
+                            vc.refresh_destination_resource_pool()
                         action_deploy(conn, action, vc)
                     else:
                         action_others(conn, action, vc)
