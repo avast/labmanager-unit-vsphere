@@ -228,6 +228,7 @@ if __name__ == '__main__':
     vc.connect()
 
     idle_counter = 0
+    actions_counter = 0
     signal.signal(signal.SIGTERM, signal_handler)
     signal.signal(signal.SIGINT, signal_handler)
 
@@ -242,7 +243,11 @@ if __name__ == '__main__':
                 )
 
                 if action:
+                    actions_counter += 1
                     if mode == 'deploy':
+                        if actions_counter > settings.app['worker']['load_refresh_interval']:
+                            actions_counter = 0
+                            vc.refresh_destination_datastore()
                         action_deploy(conn, action, vc)
                     else:
                         action_others(conn, action, vc)
