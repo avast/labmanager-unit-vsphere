@@ -59,11 +59,19 @@ def action_deploy(conn, action, vc):
         network_interface = get_network_interface(machine_ro.labels)
         inventory_folder = get_inventory_folder(machine_ro.labels)
         machine_info = {'nos_id': ''}
+        if settings.app['unit_id']:
+            output_machine_name = '{}-{}-{}'.format(
+                template,
+                settings.app['unit_id'],
+                request.machine
+            )
+        else:
+            output_machine_name = '{}-{}'.format(template, request.machine)
 
         try:
             uuid = vc.deploy(
                                 template,
-                                '{}-{}'.format(template, request.machine),
+                                output_machine_name,
                                 inventory_folder=inventory_folder
                             )
             if network_interface:
