@@ -488,7 +488,13 @@ class VCenter():
             for hw in vm.config.hardware.device:
                 try:
                     mac = hw.macAddress
-                    result = "v{}".format(re.sub(':', '', str(mac).upper()))
+                    if settings.app['nosid_prefix'] is None:
+                        result = "v{}".format(re.sub(':', '', str(mac).upper()))
+                    else:
+                        result = "{}{}".format(
+                            settings.app['nosid_prefix'],
+                            re.sub(':', '', str(mac).upper())
+                        )
                 except AttributeError:
                     pass
         except Exception:
