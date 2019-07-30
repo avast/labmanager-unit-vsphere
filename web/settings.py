@@ -14,6 +14,7 @@ class Settings:
             'labels': [],
             'slot_limit': 5,
             'unit_id': None,
+            'nosid_prefix': None,
 
             'raven': {
                 'dsn': 'fake:dsn@fakehost.com/fake'
