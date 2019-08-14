@@ -24,8 +24,9 @@ async def cap_get_info(request):
     count = 0
     with data.Connection.use() as conn:
         count = len(data.Machine.get({'state': 'running'}, conn=conn)) + \
-            len(data.Machine.get({'state': 'stopped'}, conn=conn)) + \
-            len(data.Machine.get({'state': 'deployed'}, conn=conn))
+            round(len(data.Machine.get({'state': 'stopped'}, conn=conn))/2) + \
+            len(data.Machine.get({'state': 'deployed'}, conn=conn)) + \
+            len(data.Machine.get({'state': 'created'}, conn=conn))
     return {
         'result': {
             'slot_limit': settings.app['slot_limit'],
