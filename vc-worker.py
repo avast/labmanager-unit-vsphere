@@ -56,7 +56,12 @@ def action_deploy(conn, action, vc):
         )
 
         template = get_template(machine_ro.labels)
-        network_interface = get_network_interface(machine_ro.labels)
+
+        if settings.app['vsphere']['default_network_name']:
+            network_interface = settings.app['vsphere']['default_network_name']
+        else:
+            network_interface = get_network_interface(machine_ro.labels)
+
         inventory_folder = get_inventory_folder(machine_ro.labels)
         machine_info = {'nos_id': ''}
         if settings.app['unit_id']:

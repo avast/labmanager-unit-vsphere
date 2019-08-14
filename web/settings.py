@@ -28,6 +28,7 @@ class Settings:
             },
             'vsphere': {
                 'port': 443,
+                'default_network_name': None,
                 'retries': {
                     'deploy': 15,
                     'delete': 5,
