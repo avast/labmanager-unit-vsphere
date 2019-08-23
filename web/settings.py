@@ -13,7 +13,6 @@ class Settings:
             'log_datefmt': '%Y-%m-%dT%H:%M:%S.000Z',
             'labels': [],
             'slot_limit': 5,
-            'unit_id': None,
             'nosid_prefix': None,
 
             'raven': {
