@@ -64,10 +64,10 @@ def action_deploy(conn, action, vc):
 
         inventory_folder = get_inventory_folder(machine_ro.labels)
         machine_info = {'nos_id': ''}
-        if settings.app['unit_id']:
+        if settings.app['unit_name']:
             output_machine_name = '{}-{}-{}'.format(
                 template,
-                settings.app['unit_id'],
+                settings.app['unit_name'],
                 request.machine
             )
         else:
