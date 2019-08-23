@@ -66,10 +66,30 @@ async def machine_deploy(request):
     }
 
 
+@machines.route('/machines', methods=['GET'])
+async def machines_get_info(request):
+    for key in request.raw_args.keys():
+        if key not in ['state']:
+            raise sanic.exceptions.InvalidUsage(
+                'malformatted parameter: {}'.format(key)
+            )
+
+    with data.Connection.use() as conn:
+        asyncio.sleep(0.1)
+        machines = data.Machine.get(request.raw_args, conn=conn)
+        output = []
+        for machine in machines:
+            output.append(machine.to_dict())
+
+    return {
+            'result': output,
+            'is_last': True
+    }
+
+
 @machines.route('/machines/<machine_id>', methods=['GET'])
 async def machine_get_info(request, machine_id):
     logger.debug('Current thread name: {}'. format(threading.current_thread().name))
-
     with data.Connection.use() as conn:
         asyncio.sleep(0.1)
         req = data.Machine.get({'_id': machine_id}, conn=conn).first()
