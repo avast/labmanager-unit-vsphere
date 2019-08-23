@@ -31,7 +31,7 @@ async def cap_get_info(request):
         'result': {
             'slot_limit': settings.app['slot_limit'],
             'free_slots': settings.app['slot_limit'] - count,
-            'labels': settings.app['labels']
+            'labels': settings.app['labels'] + ["unit:{}".format(settings.app['unit_name'])]
         },
         'is_last': True
     }
