@@ -79,7 +79,7 @@ async def machines_get_info(request):
         machines = data.Machine.get(request.raw_args, conn=conn)
         output = []
         for machine in machines:
-            output.append(machine.to_dict())
+            output.append({**machine.to_dict(), **{'id': machine.id}})
 
     return {
             'result': output,
