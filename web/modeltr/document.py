@@ -27,25 +27,32 @@ class Document(object):
 
     def __init__(self, **kwargs):
         types = {}
+        document_updated_property = None
         if '_defaults' not in type(self).__dict__:
             self._defaults = {}
 
         for item in inspect.getmembers(type(self)):
-            if inspect.isclass(item[1]) and item[1].__name__ in MODELTR_TYPES_LIST:
+            member_name = item[0]
+            member_value = item[1]
+            if inspect.isclass(member_value) and member_value.__name__ in MODELTR_TYPES_LIST:
                 # store types of each document entry
-                types.update({item[0]: item[1]._type})
+                types.update({member_name: member_value._type})
+
+                if member_value.__name__ == 'trSaveTimestamp':
+                    document_updated_property = member_name
 
                 # set up default values where available
-                if item[0] in self._defaults:
-                    setattr(self, item[0], self._defaults[item[0]])
+                if member_name in self._defaults:
+                    setattr(self, member_name, self._defaults[member_name])
                 else:
-                    setattr(self, item[0], item[1]._default)
+                    setattr(self, member_name, member_value._default)
 
                 # set up values defined in constructor
-                if item[0] in kwargs:
-                    setattr(self, item[0], kwargs[item[0]])
+                if member_name in kwargs:
+                    setattr(self, member_name, kwargs[member_name])
 
         self.__types = types
+        self.__document_updated_property = document_updated_property
 
         # check for wrong arguments
         for arg in kwargs:
@@ -73,6 +80,13 @@ class Document(object):
         if 'conn' not in kwargs:
             raise ValueError('conn not specified while saving some Document')
 
+        if self.__document_updated_property:
+            self.__logger.debug('setting document updated at property for {} {}'.format(
+                type(self).__name__.lower(),
+                self.id
+            ))
+            setattr(self, self.__document_updated_property, datetime.datetime.now())
+
         if self.id == trId._default:
             self.__insert(**kwargs)
         else:
@@ -89,7 +103,6 @@ class Document(object):
 
     def __save(self, **kwargs):
         self.__logger.debug('saving {} {}'.format(type(self).__name__.lower(), self.id))
-        # TODO: updated_at must be handled here
         connection = self.__get_connection(**kwargs)
 
         cur = connection.get_cursor()

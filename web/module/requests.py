@@ -29,7 +29,8 @@ async def req_get_info(request, req_id):
                 'result': {
                     'machine_id': req.machine,
                     'state': req.state,
-                    'request_type': req.type
+                    'request_type': req.type,
+                    'modified_at': req.to_dict()['modified_at'],
                 },
                 'is_last': req.state in ['success', 'failed', 'errored']
             }]
