@@ -532,7 +532,15 @@ class VCenter():
                 self.__logger.debug('found vm: {}'.format(uuid))
                 result['ip_addresses'] = self._get_machine_ips(vm, uuid)
                 result['nos_id'] = self._get_machine_nos_id(vm, uuid)
-                result['machine_name'] = self._get_machine_name(vm, uuid)
+
+                machine_name = self._get_machine_name(vm, uuid)
+                result['machine_name'] = machine_name
+
+                vsphere_host = settings.app['vsphere']['host']
+                if not endswith(vsphere_host, '/'):
+                    vsphere_host += '/'
+
+                result['machine_search_link'] = '{}ui/#?extensionId=vsphere.core.search.domainView&query={}&searchType=simple'.format(vsphere_host, machine_name)
                 self.__logger.debug('get machine info end')
         except Exception:
             self.__logger.debug('get machine info on {} failed'.format(uuid), exc_info=True)
