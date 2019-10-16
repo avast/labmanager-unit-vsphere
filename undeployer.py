@@ -131,7 +131,7 @@ def ensure_capacity(
 
     machine_seconds_sorted = sorted(machine_seconds.items(), key=lambda kv: kv[1], reverse=True)
     machine_ids_to_be_deleted = machine_seconds_sorted[0:to_be_removed] \
-        if count(machine_seconds_sorted) > to_be_removed else machine_seconds_sorted
+        if len(machine_seconds_sorted) > to_be_removed else machine_seconds_sorted
     for machine in machine_ids_to_be_deleted:
         logger.info("-> deleting machine with id {}".format(machine[0]))
         del_response = requests.delete('{}machines/{}'.format(
