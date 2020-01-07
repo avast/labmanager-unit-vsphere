@@ -15,6 +15,7 @@ class Machine(Document):
     ip_addresses = trList
     nos_id = trString
     machine_name = trString
+    vsphere_machine_search_link = trString
 
     _defaults = {
                     'state': 'created',
@@ -22,5 +23,6 @@ class Machine(Document):
                     'labels': [],
                     'ip_addresses': [],
                     'nos_id': '',
-                    'machine_name': ''
+                    'machine_name': '',
+                    'vsphere_machine_search_link': ''
                 }
