@@ -539,7 +539,7 @@ class VCenter():
                 host_name = settings.app['vsphere']['host']
                 vsphere_address = 'https://{}/'.format(host_name)
 
-                result['vsphere_machine_search_link'] = '{}{}{}{}'.format(
+                result['machine_search_link'] = '{}{}{}{}'.format(
                     vsphere_address,
                     'ui/#?extensionId=vsphere.core.search.domainView&query=',
                     machine_name,
