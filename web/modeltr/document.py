@@ -155,16 +155,22 @@ class Document(object):
     @classmethod
     def _db_record_to_instance_pq(cls, record):
         # print(record)
-        new_document = cls(id=str(record[0]))
-        for prop in record[2].keys():
+        record_id = record[0]
+        record_data = record[2]
+        new_document = cls(id=str(record_id))
+        for prop in record_data.keys():
+            # every field that is stored in the db and is not defined in model
+            # will be inaccessible
+            if prop not in new_document.__types:
+                continue
             if isinstance(datetime.datetime.now(), new_document.__types[prop]):
                 setattr(
                         new_document,
                         prop,
-                        datetime.datetime.strptime(record[2][prop], cls.__datetime_format)
+                        datetime.datetime.strptime(record_data[prop], cls.__datetime_format)
                 )
             else:
-                setattr(new_document, prop, record[2][prop])
+                setattr(new_document, prop, record_data[prop])
         return new_document
 
     @classmethod
