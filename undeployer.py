@@ -96,7 +96,10 @@ def ensure_capacity(
     )
     if response.status_code != 200:
         logger.warning(
-            "cannot get capabilities of cluster {}, stats not available!".format(cluster)
+            "cannot get capabilities of cluster {}, stats not available ({})!".format(
+                endpoint_name,
+                response.status_code
+            )
         )
         return
 
