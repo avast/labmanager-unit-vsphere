@@ -96,7 +96,7 @@ def action_deploy(conn, action, vc):
         machine.provider_id = uuid
         machine.nos_id = machine_info['nos_id']
         machine.machine_name = machine_info['machine_name']
-        machine.vsphere_machine_search_link = machine_info['vsphere_machine_search_link']
+        machine.machine_search_link = machine_info['machine_search_link']
         request.state = 'success'
         request.save(conn=conn)
         machine.state = 'deployed'
@@ -171,7 +171,7 @@ def action_others(conn, action, vc):
 
             machine = data.Machine.get_one_for_update({'_id': request.machine}, conn=conn)
             machine.nos_id = info['nos_id']
-            machine.vsphere_machine_search_link = info['vsphere_machine_search_link']
+            machine.machine_search_link = info['machine_search_link']
 
             if len(info['ip_addresses']) != 0:
                 machine.ip_addresses = info['ip_addresses']
