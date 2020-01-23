@@ -167,7 +167,7 @@ def action_others(conn, action, vc):
                 logger.debug(info)
             except Exception:
                 logger.error('get_info exception: ', exc_info=True)
-                info = {'ip_addresses': [], 'nos_id': ''}
+                info = {'ip_addresses': [], 'nos_id': '', 'machine_search_link': ''}
 
             machine = data.Machine.get_one_for_update({'_id': request.machine}, conn=conn)
             machine.nos_id = info['nos_id']
