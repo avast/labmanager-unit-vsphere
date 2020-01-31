@@ -1,35 +1,50 @@
+# Please replace all fake_* values with real data first
+
 default: &defaults
+  labels:                                           # capabilities of your unit
+    - template:fake_Win_10_x86
+    - template:fake_Win_10_x64
+  
   log_level: DEBUG
 
   db:
-    host: localhost
-    database: fake_database
-    replica_set: fake_replica_set
-    ssl_ca_certs_file: /foo/bar
-    ssl: true
-    username: ~
-    password: ~
-
+    dsn: "host=fake_host.com port=5432 user=fake_user password=fake_password dbname=fake_db"
+    
   vsphere:
-    host: fake_host
-    username: fake_user
-    password: fake_password
-    port: 42
-    default_snapshot_name: fake_default_snapshot
-    default_network_name: fake_network
-    folder: /vm/fake/folder
+    host: fake_host                                 # vCenter host
+    username: fake_user                             # vCenter host login
+    password: fake_password                         # vCenter host password
+    port: 443
+    default_snapshot_name: fake_default_snapshot    # Base snapshot on VM to create new machines from
+    default_network_name: fake_network              # vCenter network name
+    folder: /vm/fake_folder                         # vCenter folder
+    compute: fake_compute                           # vCenter cluster of computes
+    storage: fake_storage                           # vCenter storage name  
 
   service:
     host: 0.0.0.0
-    port: 666
-    workers: 6
+    port: 8080
+    workers: 6                                      # Number of Sanic workers for web interface
 
 production:
   <<: *defaults
   log_level: WARNING
 
+  slot_limit: 7                                     # How many machines will unit provide?
+  unit_name: fake_unit_name                         # Name to identify machine with (English alphabet and numbers, _, -)
+  nosid_prefix: fake_nosid_prefix                   # Required only for advanced operations involving NOS (warning: not opensourced)
+
 development:
   <<: *defaults
 
+  slot_limit: 7
+  unit_name: fake_dev_unit_name
+  nosid_prefix: fake_dev_nosid_prefix
+
 test:
   <<: *defaults
+
+  slot_limit: 7  
+  unit_name: fake_test_unit_name
+  nosid_prefix: fake_test_nosid_prefix
+ 
