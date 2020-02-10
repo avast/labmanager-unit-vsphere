@@ -37,29 +37,29 @@ if __name__ == '__main__':
             try:
                 now = datetime.datetime.now()
                 action = data.Action.get_one_for_update_skip_locked({'lock': 1}, conn=conn)
+
                 if action and action.next_try < now:
-                    if True:
-                        if action.repetitions == 0:
-                            logger.info('action {} timeouted'.format(action.id))
-                            request = data.Request.get_one_for_update(
-                                                                        {'_id': action.request},
-                                                                        conn=conn
-                            )
-                            request.state = 'timeouted'
-                            request.save(conn=conn)
-                            action.lock = -1
-                            action.save(conn=conn)
-                        else:
-                            logger.debug('firing action: {}'.format(action.id))
-                            logger.debug(action.to_dict())
-                            action.lock = 0
-                            action.next_try = datetime.datetime(
-                                                                year=datetime.MAXYEAR,
-                                                                month=1,
-                                                                day=1
-                            )
-                            action.save(conn=conn)
-                            logger.debug('firing done: {}'.format(action.id))
+                    if action.repetitions == 0:
+                        logger.info('action {} timeouted'.format(action.id))
+                        request = data.Request.get_one_for_update(
+                                                                    {'_id': action.request},
+                                                                    conn=conn
+                        )
+                        request.state = 'timeouted'
+                        request.save(conn=conn)
+                        action.lock = -1
+                        action.save(conn=conn)
+                    else:
+                        logger.debug('firing action: {}'.format(action.id))
+                        logger.debug(action.to_dict())
+                        action.lock = 0
+                        action.next_try = datetime.datetime(
+                                                            year=datetime.MAXYEAR,
+                                                            month=1,
+                                                            day=1
+                        )
+                        action.save(conn=conn)
+                        logger.debug('firing done: {}'.format(action.id))
 
             except Exception:
                 settings.raven.captureException(exc_info=True)
