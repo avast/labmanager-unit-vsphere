@@ -524,7 +524,7 @@ class VCenter():
 
     def get_machine_info(self, uuid):
         self.__check_connection()
-        result = {'ip_addresses': [], 'nos_id': ''}
+        result = {'ip_addresses': [], 'nos_id': '', 'machine_search_link': ''}
 
         vm = self.content.searchIndex.FindByUuid(None, uuid, True)
         try:
