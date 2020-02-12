@@ -37,6 +37,7 @@ class VCenter():
                             user=settings.app['vsphere']['username'],
                             pwd=settings.app['vsphere']['password'],
                             port=settings.app['vsphere']['port'],
+                            connectionPoolTimeout=settings.app['vsphere']['timeout'],
                             sslContext=context
         )
 
