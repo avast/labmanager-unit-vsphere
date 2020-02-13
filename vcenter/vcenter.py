@@ -24,12 +24,8 @@ class VCenter():
         self.vm_folders = None
 
     def __check_connection(self):
-        try:
-            objView = self.content.viewManager.CreateContainerView(self.content.rootFolder,
-                                                                   [vim.Datastore],
-                                                                   True)
-            objView.Destroy()
-        except Exception:
+        result = self.__get_objects_list_from_container(self.content.rootFolder, vim.Datastore)
+        if not result:
             self.connect()
 
     def connect(self):
@@ -139,28 +135,13 @@ class VCenter():
 
     def __get_destination_resource_pool(self):
         self.__logger.debug('Getting destination resource pool...')
-        try:
-            objView = self.content.viewManager.CreateContainerView(
-                                                                       self.content.rootFolder,
-                                                                       [vim.ResourcePool],
-                                                                       True
-                )
-
-            wanted_name = settings.app['vsphere']['resource_pool']
-            sp = next((item for item in objView.view if item.name == wanted_name), None)
-            if sp:
-                self.__logger.debug('found resource pool: {} {}'.format(sp.name, sp))
-                return sp
-
-        except vmodl.fault.ManagedObjectNotFound:
-            self.__logger.warn('vmodl.fault.ManagedObjectNotFound has occured')
-        except Exception:
-            settings.raven.captureException(exc_info=True)
-        finally:
-            objView.Destroy()
-            self.__logger.debug('Getting done')
-
+        resource_pool_name = settings.app['vsphere']['resource_pool']
+        resource_pools = self.__get_objects_list_from_container(self.content.rootFolder, vim.ResourcePool)
+        for rp in resource_pools:
+            if rp.name == resource_pool_name:
+                return rp
         return None
+
 
     def __sleep_between_tries(self):
         time.sleep(random.uniform(
@@ -875,16 +856,3 @@ class VCenter():
 
             return f_folder
 
-
-# v = VCenter()
-# v.connect()
-# uuid = v.deploy('Win_10_Pro_64b_EN', 'deleteme_testovaci_masina_12')
-# print(uuid)
-# #v.get_machine_info()
-# v.start(uuid)
-# datastore, path = v.take_screenshot(uuid)
-#
-# local_path = v.download_file_from_datastore(remote_path_to_file=path, datastore_name=datastore, custom_local_path='/tmp/ahoj.png')
-#
-# print(local_path)
-# v.stop(uuid)
