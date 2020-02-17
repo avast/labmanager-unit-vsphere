@@ -6,6 +6,7 @@ import web.module.machines
 import web.module.requests
 import web.module.capabilities
 import web.module.snapshots
+import web.module.screenshots
 import web.module.uptime
 
 import web.middleware.auth
@@ -41,6 +42,7 @@ lm_unit_webserver.register_middleware(web.middleware.json_params.json_params, 'r
 lm_unit_webserver.blueprint(web.module.machines.machines, url_prefix='/api/v4')
 lm_unit_webserver.blueprint(web.module.requests.requests, url_prefix='/api/v4')
 lm_unit_webserver.blueprint(web.module.snapshots.snapshots, url_prefix='/api/v4')
+lm_unit_webserver.blueprint(web.module.screenshots.screenshots, url_prefix='/api/v4')
 lm_unit_webserver.blueprint(web.module.uptime.uptime, url_prefix='/api/v4')
 lm_unit_webserver.blueprint(web.module.capabilities.capabilities, url_prefix='/api/v4')
 lm_unit_webserver.blueprint(web.module.uptime.uptime, url_prefix='/')

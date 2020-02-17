@@ -9,6 +9,7 @@ class Request(Document):
     type = trString
     state = trString
     machine = trString
+    subject_id = trString
 
     _defaults = {
                     'state': 'created'
