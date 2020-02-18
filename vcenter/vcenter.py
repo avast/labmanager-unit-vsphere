@@ -3,6 +3,7 @@ from pyVmomi import vim, vmodl
 
 from web.settings import Settings as settings
 
+import base64
 import sys
 import ssl
 import atexit
@@ -12,7 +13,7 @@ import time
 import logging
 import re
 import random
-
+import tempfile
 
 class VCenter():
 
@@ -441,9 +442,9 @@ class VCenter():
                 settings.raven.captureException(exc_info=True)
                 self.__sleep_between_tries()
 
-    def take_screenshot(self, uuid):
+    def _take_screenshot_to_datastore(self, uuid):
         """
-        Takes screenshot of VM and saved it in datastore
+        Takes screenshot of VM and saves it in datastore
         :param uuid: machine uuid
         :return: tuple; name of datastore (where screenshot is saved) and path to screenshot in datastore
         """
@@ -457,14 +458,36 @@ class VCenter():
         screenshot_task = vm.CreateScreenshot_Task()
         self.wait_for_task(screenshot_task)
         result_path = screenshot_task.info.result
-        if result_path is None:
-            raise RuntimeError('Taking screenshot failed!')
-
+        if not result_path:
+            return None, None
         # can't we just use self.destination_datastore.info.name ?
         datastore_name, screenshot_path = result_path.split(' ')
         datastore_name = datastore_name.lstrip('[').rstrip(']')
         self.__logger.debug(f'<- take_screenshot: {datastore_name}, {screenshot_path}')
         return datastore_name, screenshot_path
+
+    def take_screenshot(self, uuid):
+        """
+        Takes screenshot of VM and returns it as base64 encoded string
+        :param uuid: machine uuid
+        :return: base64 encoded string, or None in case of failure
+        """
+        datastore, path = self._take_screenshot_to_datastore(uuid=uuid)
+        screenshot_content = None
+
+        if datastore is not None or path is not None:
+
+            with tempfile.TemporaryDirectory() as td:
+                # download to temp, will be deleted automatically
+                temp_screenshot = os.path.join(td, 'screenshot.png')
+                screenshot_path = self.download_file_from_datastore(remote_path_to_file=path,
+                                                                    datastore_name=datastore,
+                                                                    custom_local_path=temp_screenshot)
+                if screenshot_path is not None:
+                    with open(screenshot_path, 'rb') as s:
+                        screenshot_content = base64.b64encode(s.read())
+
+            return screenshot_content
 
     # TODO rewrite others to use this one
     def __get_objects_list_from_container(self, container, object_type):
