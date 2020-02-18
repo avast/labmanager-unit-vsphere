@@ -498,29 +498,39 @@ class VCenter():
 
     def download_file_from_datastore(self, remote_path_to_file, datastore_name, custom_local_path=None):
         """
-        Downloads file from datastore
+        Downloads file from datastore (with retries)
         :param remote_path_to_file: path to file in datastore (e.g. my_vm/my_vm.png)
         :param datastore_name: name of datastore
-        :param custom_local_path: Optional, is specified, file will be saved with this path. Otherwise to current working directory using the same filename as on remote
-        :return: path to downloaded file
+        :param custom_local_path: Optional, is specified, file will be saved with this path.
+        Otherwise to current working directory using the same filename as on remote
+        :return: path to downloaded file, or None in case of failures
         """
+        self.__check_connection()
         server_name =  settings.app['vsphere']['host']
         datacenter = self.__get_datacenter_for_datastore(datastore_name)
         if datacenter is None:
             raise RuntimeError(f'Cannot find datacenter for datastore {datastore_name}')
 
-        download_url= f'https://{server_name}/folder/{remote_path_to_file}?dcPath={datacenter.name}&dsName={datastore_name}'
-        resp = requests.get(url=download_url, verify=False, headers={'Cookie': self._connection_cookie})
+        download_url = f'https://{server_name}/folder/{remote_path_to_file}?dcPath={datacenter.name}&dsName={datastore_name}'
 
-        if resp.status_code != 200:
-            raise RuntimeError(f'Cannot download file: {remote_path_to_file} (from datastore: {datastore_name})!')
+        for i in range(3):
+            try:
+                resp = requests.get(url=download_url, verify=False, headers={'Cookie': self._connection_cookie})
+                if resp.status_code == 200:
+                    # download ok, save return path
+                    downloaded_file_path = custom_local_path if custom_local_path is not None else os.path.basename(remote_path_to_file)
+                    with open(downloaded_file_path, 'wb') as lf:
+                        lf.write(resp.content)
+                    return downloaded_file_path
+                else:
+                    # try again
+                    self.__logger.warning(f'Downloading of {remote_path_to_file} (retry {i}) failed with status code: {resp.status_code}')
+                    continue
+            except Exception as e:
+                self.__logger.warning(f'Downloading of {remote_path_to_file} (retry {i}) failed: {e}')
 
-        downloaded_file_path = custom_local_path if custom_local_path is not None else os.path.basename(remote_path_to_file)
-
-        with open(downloaded_file_path, 'wb') as lf:
-            lf.write(resp.content)
-
-        return downloaded_file_path
+        # failed, nothing to return
+        return None
 
 
     def config_network(self, uuid, **kwargs):
