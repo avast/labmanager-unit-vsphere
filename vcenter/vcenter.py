@@ -470,21 +470,13 @@ class VCenter:
         :return: base64 encoded string, or None in case of failure
         """
         datastore, path = self._take_screenshot_to_datastore(uuid=uuid)
-        screenshot_content = None
+        screenshot_data_b64 = None
 
         if datastore is not None or path is not None:
+            screenshot_data = self.get_file_bytes_from_datastore(datastore_name=datastore, remote_path_to_file=path)
+            screenshot_data_b64 = base64.b64encode(screenshot_data)
 
-            with tempfile.TemporaryDirectory() as td:
-                # download to temp, will be deleted automatically
-                temp_screenshot = os.path.join(td, 'screenshot.png')
-                screenshot_path = self.download_file_from_datastore(remote_path_to_file=path,
-                                                                    datastore_name=datastore,
-                                                                    custom_path=temp_screenshot)
-                if screenshot_path is not None:
-                    with open(screenshot_path, 'rb') as s:
-                        screenshot_content = base64.b64encode(s.read())
-
-            return screenshot_content
+        return screenshot_data_b64
 
     # TODO rewrite others to use this one
     def __get_objects_list_from_container(self, container, object_type):
@@ -516,14 +508,13 @@ class VCenter:
                     return dc
         return None
 
-    def download_file_from_datastore(self, remote_path_to_file, datastore_name, custom_path=None):
+    def get_file_bytes_from_datastore(self, remote_path_to_file, datastore_name):
         """
-        Downloads file from datastore (with retries)
+        Downloads file from datastore (with retries) and returns its data.
+        Note: keep in mind requested file size, since data are in memory!
         :param remote_path_to_file: path to file in datastore (e.g. my_vm/my_vm.png)
         :param datastore_name: name of datastore
-        :param custom_path: Optional, is specified, file will be saved with this path.
-        Otherwise to current working directory using the same filename as on remote
-        :return: path to downloaded file, or None in case of failures
+        :return: data
         """
         self.__check_connection()
         server_name = settings.app['vsphere']['host']
@@ -538,10 +529,7 @@ class VCenter:
                 resp = requests.get(url=url, verify=False, headers={'Cookie': self._connection_cookie})
                 if resp.status_code == 200:
                     # download ok, save return path
-                    result_file_path = custom_path if custom_path is not None else os.path.basename(remote_path_to_file)
-                    with open(result_file_path, 'wb') as lf:
-                        lf.write(resp.content)
-                    return result_file_path
+                    return resp.content
                 else:
                     # try again
                     msg = f'Download of {remote_path_to_file} (retry {i}) failed with status code: {resp.status_code}'
