@@ -3,30 +3,31 @@ from pyVmomi import vim, vmodl
 
 from web.settings import Settings as settings
 
+import base64
 import sys
 import ssl
 import atexit
+import requests
+import os
 import time
 import logging
 import re
 import random
+import tempfile
 
 
-class VCenter():
+class VCenter:
 
     def __init__(self):
         self._connected = False
+        self._connection_cookie = None
         self.content = None
         self.__logger = logging.getLogger(__name__)
         self.vm_folders = None
 
     def __check_connection(self):
-        try:
-            objView = self.content.viewManager.CreateContainerView(self.content.rootFolder,
-                                                                   [vim.Datastore],
-                                                                   True)
-            objView.Destroy()
-        except Exception:
+        result = self.__get_objects_list_from_container(self.content.rootFolder, vim.Datastore)
+        if not result:
             self.connect()
 
     def connect(self):
@@ -47,6 +48,7 @@ class VCenter():
             )
 
         self.content = si.content
+        self._connection_cookie = si._stub.cookie
         self._connected = True
         self.vm_folders = VCenter.VmFolders(self)
         self.destination_datastore = None
@@ -63,93 +65,80 @@ class VCenter():
     def refresh_destination_resource_pool(self):
         self.destination_resource_pool = self.__get_destination_resource_pool()
 
+    def __find_datastore_cluster_by_name(self, datastore_cluster_name):
+        """
+        Returns datastore cluster, if datastore cluster with this name exists. Otherwise None.
+        :param datastore_cluster_name:
+        :return: datastore cluster or None
+        """
+        data_clusters = self.__get_objects_list_from_container(self.content, vim.StoragePod)
+        for dc in data_clusters:
+                if dc.name == datastore_cluster_name:
+                    return dc
+        return None
+
+    def __find_datastore_by_name(self, datastore_name):
+        """
+        Returns datastore, if datastore with this name exists. Otherwise None.
+        :param datastore_name:
+        :return: datastore or None
+        """
+        datastores = self.__get_objects_list_from_container(self.content.rootFolder, vim.Datastore)
+        for ds in datastores:
+            if ds.name == datastore_name:
+                return ds
+        return None
+
+    def __get_free_datastore(self, datastore_cluster):
+        """
+        Returns datastore from 'datastore_cluster' with most free space
+        :param datastore_cluster:
+        :return: datastore
+        """
+        freespace = 0
+        output_ds = None
+        for ds in datastore_cluster.childEntity:
+            ds_freespace = round(ds.summary.freeSpace/1024/1024/1024, 2)
+            self.__logger.debug(
+                'inspected datastore: {}, {:.2f} GiB left'.format(ds.name, ds_freespace)
+            )
+            if ds.summary.accessible and ds_freespace > freespace:
+                freespace = ds_freespace
+                output_ds = ds
+
+        if output_ds is not None:
+            self.__logger.debug(f'selected datastore: {output_ds.name}, {freespace} GiB left')
+
+        return output_ds
+
     def __get_destination_datastore(self):
         self.__logger.debug('Getting destination datastores...')
-        try:
-            objView = self.content.viewManager.CreateContainerView(
-                                                                       self.content.rootFolder,
-                                                                       [vim.StoragePod],
-                                                                       True
-                )
 
-            wanted_name = settings.app['vsphere']['storage']
-            sp = next((item for item in objView.view if item.name == wanted_name), None)
-            if sp:
-                self.__logger.debug('found datastore cluster: {} {}'.format(sp.name, sp))
-                freespace = 0
-                output_ds = None
-                for ds in sp.childEntity:
-                    ds_freespace = ds.summary.freeSpace/1024/1024/1024
-                    self.__logger.debug(
-                        'inspected datastore: {}, {:.2f} GiB left'.format(ds.name, ds_freespace)
-                    )
-                    if ds.summary.accessible and ds_freespace > freespace:
-                        freespace = ds_freespace
-                        output_ds = ds
-                self.__logger.debug(
-                    'selected datastore: {}, {:.2f} GiB left'.format(output_ds.name, freespace)
-                )
-                self.__logger.debug('Getting done')
-                return output_ds
+        unit_datastore_cluster_name = settings.app['vsphere']['storage']
+        ds_cluster = self.__find_datastore_cluster_by_name(unit_datastore_cluster_name)
 
-        except vmodl.fault.ManagedObjectNotFound:
-            self.__logger.warn('vmodl.fault.ManagedObjectNotFound has occured')
-        except Exception:
-            settings.raven.captureException(exc_info=True)
-        finally:
-            objView.Destroy()
+        if ds_cluster is not None:
+            self.__logger.debug(f'found datastore cluster: {ds_cluster.name} ({ds_cluster})')
+            datastore = self.__get_free_datastore(ds_cluster)
+            return datastore
 
-        # search for datastore name
-        try:
-            objView = self.content.viewManager.CreateContainerView(
-                                                                       self.content.rootFolder,
-                                                                       [vim.Datastore],
-                                                                       True
-                )
+        # 'vsphere.storage' may contain directly datastore name
+        datastore_name = unit_datastore_cluster_name
+        datastore = self.__find_datastore_by_name(datastore_name)
 
-            wanted_name = settings.app['vsphere']['storage']
-            sp = next((item for item in objView.view if item.name == wanted_name), None)
-            if sp and sp.summary.accessible:
-                self.__logger.debug(
-                    'selected datastore: {}, {:.2f} GiB left'.format(
-                        sp.name,
-                        sp.summary.freeSpace/1024/1024/1024
-                    )
-                )
-                return sp
-            return None
+        if datastore is not None and datastore.summary.accessible:
+            ds_free_space = round(datastore.summary.freeSpace/1024/1024/1024, 2)
+            self.__logger.debug(f'selected datastore: {datastore.name}, {ds_free_space} GiB left')
 
-        except vmodl.fault.ManagedObjectNotFound:
-            self.__logger.warn('vmodl.fault.ManagedObjectNotFound has occured')
-        except Exception:
-            settings.raven.captureException(exc_info=True)
-        finally:
-            objView.Destroy()
-            self.__logger.debug('Getting done')
+        return datastore
 
     def __get_destination_resource_pool(self):
         self.__logger.debug('Getting destination resource pool...')
-        try:
-            objView = self.content.viewManager.CreateContainerView(
-                                                                       self.content.rootFolder,
-                                                                       [vim.ResourcePool],
-                                                                       True
-                )
-
-            wanted_name = settings.app['vsphere']['resource_pool']
-            sp = next((item for item in objView.view if item.name == wanted_name), None)
-            if sp:
-                self.__logger.debug('found resource pool: {} {}'.format(sp.name, sp))
-                return sp
-
-        except vmodl.fault.ManagedObjectNotFound:
-            self.__logger.warn('vmodl.fault.ManagedObjectNotFound has occured')
-        except Exception:
-            settings.raven.captureException(exc_info=True)
-        finally:
-            objView.Destroy()
-            self.__logger.debug('Getting done')
-
+        resource_pool_name = settings.app['vsphere']['resource_pool']
+        resource_pools = self.__get_objects_list_from_container(self.content.rootFolder, vim.ResourcePool)
+        for rp in resource_pools:
+            if rp.name == resource_pool_name:
+                return rp
         return None
 
     def __sleep_between_tries(self):
@@ -449,6 +438,109 @@ class VCenter():
             except Exception:
                 settings.raven.captureException(exc_info=True)
                 self.__sleep_between_tries()
+
+    def _take_screenshot_to_datastore(self, uuid):
+        """
+        Takes screenshot of VM and saves it in datastore
+        :param uuid: machine uuid
+        :return: tuple; name of datastore (where screenshot is saved)
+        and path to screenshot in datastore
+        """
+        self.__logger.debug('-> take_screenshot()')
+        self.__check_connection()
+        vm = self.content.searchIndex.FindByUuid(None, uuid, True)
+        if vm is None:
+            raise Exception(f'machine {uuid} not found')
+
+        self.__logger.debug(f'found vm: {vm.config.uuid}')
+        screenshot_task = vm.CreateScreenshot_Task()
+        self.wait_for_task(screenshot_task)
+        result_path = screenshot_task.info.result
+        if not result_path:
+            return None, None
+        # can't we just use self.destination_datastore.info.name ?
+        datastore_name, screenshot_path = result_path.split(' ')
+        datastore_name = datastore_name.lstrip('[').rstrip(']')
+        self.__logger.debug(f'<- take_screenshot: {datastore_name}, {screenshot_path}')
+        return datastore_name, screenshot_path
+
+    def take_screenshot(self, uuid):
+        """
+        Takes screenshot of VM and returns it as base64 encoded string
+        :param uuid: machine uuid
+        :return: base64 encoded string, or None in case of failure
+        """
+        datastore, path = self._take_screenshot_to_datastore(uuid=uuid)
+        screenshot_data_b64 = None
+
+        if datastore is not None or path is not None:
+            screenshot_data = self.get_file_bytes_from_datastore(datastore_name=datastore, remote_path_to_file=path)
+            screenshot_data_b64 = base64.b64encode(screenshot_data)
+
+        return screenshot_data_b64
+
+    # TODO rewrite others to use this one
+    def __get_objects_list_from_container(self, container, object_type):
+
+        result = []
+        object_view = None
+        try:
+            object_view = self.content.viewManager.CreateContainerView(
+                    container,
+                    [object_type],
+                    True)
+            result = list(object_view.view)
+        except vmodl.fault.ManagedObjectNotFound:
+            self.__logger.warn('vmodl.fault.ManagedObjectNotFound has occured')
+        except Exception:
+            settings.raven.captureException(exc_info=True)
+        finally:
+            if object_view is not None:
+                object_view.Destroy()
+
+        return result
+
+    def __get_datacenter_for_datastore(self, datastore_name):
+        dcs = self.__get_objects_list_from_container(self.content.rootFolder, vim.Datacenter)
+        for dc in dcs:
+            datastores = self.__get_objects_list_from_container(dc, vim.Datastore)
+            for ds in datastores:
+                if ds.info.name == datastore_name:
+                    return dc
+        return None
+
+    def get_file_bytes_from_datastore(self, remote_path_to_file, datastore_name):
+        """
+        Downloads file from datastore (with retries) and returns its data.
+        Note: keep in mind requested file size, since data are in memory!
+        :param remote_path_to_file: path to file in datastore (e.g. my_vm/my_vm.png)
+        :param datastore_name: name of datastore
+        :return: data
+        """
+        self.__check_connection()
+        server_name = settings.app['vsphere']['host']
+        datacenter = self.__get_datacenter_for_datastore(datastore_name)
+        if datacenter is None:
+            raise RuntimeError(f'Cannot find datacenter for datastore {datastore_name}')
+
+        url = f'https://{server_name}/folder/{remote_path_to_file}?dcPath={datacenter.name}&dsName={datastore_name}'
+
+        for i in range(3):
+            try:
+                resp = requests.get(url=url, verify=False, headers={'Cookie': self._connection_cookie})
+                if resp.status_code == 200:
+                    # download ok, save return path
+                    return resp.content
+                else:
+                    # try again
+                    msg = f'Download of {remote_path_to_file} (retry {i}) failed with status code: {resp.status_code}'
+                    self.__logger.warning(msg)
+                    continue
+            except Exception as e:
+                self.__logger.warning(f'Downloading of {remote_path_to_file} (retry {i}) failed: {e}')
+
+        # failed, nothing to return
+        return None
 
     def config_network(self, uuid, **kwargs):
         self.__logger.debug('config_network')
