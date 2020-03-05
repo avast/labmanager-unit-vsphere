@@ -33,7 +33,10 @@ Contributors outside QA Automation team are required to discuss the contribution
             ALTER TABLE public.documents OWNER TO postgres;
   ```
 * copy file `config/lm-unit.yaml.example` to `config/lm-unit.yaml`
-
+* adjust the contents of `config/lm-unit.yaml`
+    * the config already contains some hints
+    * please fill in database data `db:` section    
+    * please fill in vSphere data in `vsphere:` section
 
 * install Python 3.6
 * install pipenv
