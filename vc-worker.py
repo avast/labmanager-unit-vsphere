@@ -43,7 +43,7 @@ def get_inventory_folder(labels):
     return None
 
 
-def action_deploy(conn, action, vc):
+def process_deploy_action(conn, action, vc):
     logger = logging.getLogger('action_deploy')
     try:
         request = data.Request.get_one_for_update({'_id': action.request}, conn=conn)
@@ -136,7 +136,69 @@ def action_stop(request, machine, vc):
     return {'machine.state': 'stopped'}
 
 
-def action_others(conn, action, vc):
+def action_get_info(request, machine_ro, vc, action, conn):
+    logger.debug(request.to_dict())
+    try:
+        info = vc.get_machine_info(machine_ro.provider_id)
+        logger.debug(info)
+    except Exception:
+        logger.error('get_info exception: ', exc_info=True)
+        info = {'ip_addresses': [], 'nos_id': '', 'machine_search_link': ''}
+
+    machine = data.Machine.get_one_for_update({'_id': request.machine}, conn=conn)
+    machine.nos_id = info['nos_id']
+    machine.machine_search_link = info['machine_search_link']
+
+    if len(info['ip_addresses']) != 0:
+        machine.ip_addresses = info['ip_addresses']
+        machine.save(conn=conn)
+        request.state = 'success'
+        action.lock = -1
+    else:
+        machine.save(conn=conn)
+        request.state = 'delayed'
+        action.repetitions -= 1
+        action.next_try = datetime.datetime.now() + datetime.timedelta(
+            seconds=random.randint(action.delay, action.delay+3)
+        )
+        action.lock = 1
+    request.save(conn=conn)
+    action.save(conn=conn)
+
+
+def enqueue_get_info_request(request, machine, conn):
+    # create another task to get info about that machine
+    logger.debug('creating another get_info action for {}'.format(request.machine))
+    new_request = data.Request(type='get_info', machine=str(machine.id))
+    new_request.save(conn=conn)
+    machine.requests.append(new_request.id)
+    machine.save(conn=conn)
+    data.Action(
+            type='other',
+            request=new_request.id,
+            repetitions=20,
+            delay=10,
+            next_try=datetime.datetime.now() + datetime.timedelta(seconds=5)
+    ).save(conn=conn)
+
+
+def action_take_screenshot(request, machine, vc, action, conn):
+    screenshot_data = vc.take_screenshot(machine.provider_id)
+    if request.subject_id:
+        ss = data.Screenshot.get_one_for_update({'_id': request.subject_id}, conn=conn)
+        if screenshot_data:
+            ss.image_base64 = screenshot_data.decode("utf-8")
+            ss.status = "obtained"
+        else:
+            ss.image_base64 = ""
+            ss.status = "error"
+        ss.save(conn=conn)
+    else:
+        settings.raven.captureMessage('Error obtaining subject_id from Request')
+    return {'machine.state': '<unchanged>'}
+
+
+def process_other_actions(conn, action, vc):
     logger = logging.getLogger('action_others')
     logger.info('{}-{}->'.format(os.getpid(), action.id))
 
@@ -153,6 +215,15 @@ def action_others(conn, action, vc):
                                                             machine_ro.provider_id
         )
         )
+
+        if machine_ro.state in ['undeployed']:
+            request.state = 'aborted'
+            request.save(conn=conn)
+            action.lock = -1
+            action.save(conn=conn)
+            logger.info('request aborted, cannot be done on a machine in such a state')
+            return
+
         action_result = {'machine.state': 'failed'}
         if request_type == 'undeploy':
             action_result = action_undeploy(request, machine_ro, vc)
@@ -161,59 +232,27 @@ def action_others(conn, action, vc):
         elif request_type == 'stop':
             action_result = action_stop(request, machine_ro, vc)
         elif request_type == 'get_info':
-            logger.debug(request.to_dict())
-            try:
-                info = vc.get_machine_info(machine_ro.provider_id)
-                logger.debug(info)
-            except Exception:
-                logger.error('get_info exception: ', exc_info=True)
-                info = {'ip_addresses': [], 'nos_id': '', 'machine_search_link': ''}
-
-            machine = data.Machine.get_one_for_update({'_id': request.machine}, conn=conn)
-            machine.nos_id = info['nos_id']
-            machine.machine_search_link = info['machine_search_link']
-
-            if len(info['ip_addresses']) != 0:
-                machine.ip_addresses = info['ip_addresses']
-                machine.save(conn=conn)
-                request.state = 'success'
-                action.lock = -1
-            else:
-                machine.save(conn=conn)
-                request.state = 'delayed'
-                action.repetitions -= 1
-                action.next_try = datetime.datetime.now() + datetime.timedelta(
-                    seconds=random.randint(action.delay, action.delay+3)
-                )
-                action.lock = 1
-            request.save(conn=conn)
-            action.save(conn=conn)
+            action_get_info(request, machine_ro, vc, action, conn)
             return
+        elif request_type == 'take_screenshot':
+            action_result = action_take_screenshot(request, machine_ro, vc, action, conn)
         else:
             logger.warn('unknown request: {} is going to succeed'.format(request_type))
-        machine = data.Machine.get_one_for_update({'_id': request.machine}, conn=conn)
-        machine.state = action_result['machine.state']
+
+        if request_type in ['undeploy', 'start', 'stop']:  # only these requests can change machine state
+            machine = data.Machine.get_one_for_update({'_id': request.machine}, conn=conn)
+            if machine.state not in ['undeployed', 'failed']:  # theses states cannot be changed anymore
+                machine.state = action_result['machine.state']
+            machine.save(conn=conn)
+
         request.state = 'success' if action_result['machine.state'] != 'failed' else 'failed'
         request.save(conn=conn)
-        machine.save(conn=conn)
         logger.debug('updating action to be finished...')
         action.lock = -1
         action.save(conn=conn)
 
         if request_type == 'start':
-            # create another task to get info about that machine
-            logger.debug('creating another get_info action for {}'.format(request.machine))
-            new_request = data.Request(type='get_info', machine=str(machine.id))
-            new_request.save(conn=conn)
-            machine.requests.append(new_request.id)
-            machine.save(conn=conn)
-            data.Action(
-                    type='other',
-                    request=new_request.id,
-                    repetitions=20,
-                    delay=10,
-                    next_try=datetime.datetime.now() + datetime.timedelta(seconds=5)
-                ).save(conn=conn)
+            enqueue_get_info_request(request, machine, conn)
 
     except Exception as e:
         settings.raven.captureException(exc_info=True)
@@ -265,9 +304,9 @@ if __name__ == '__main__':
                             actions_counter = 0
                             vc.refresh_destination_datastore()
                             vc.refresh_destination_resource_pool()
-                        action_deploy(conn, action, vc)
+                        process_deploy_action(conn, action, vc)
                     else:
-                        action_others(conn, action, vc)
+                        process_other_actions(conn, action, vc)
                 else:
                     idle_counter += 1
                     if idle_counter > settings.app['worker']['idle_counter']:

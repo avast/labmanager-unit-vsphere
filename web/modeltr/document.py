@@ -106,7 +106,7 @@ class Document(object):
         connection = self.__get_connection(**kwargs)
 
         cur = connection.get_cursor()
-        self.__logger.debug(self.to_dict())
+        self.__logger.debug(self.to_dict(redacted=True))
         cur.execute(
                     "update documents set data= %s where id = %s",
                     [json.dumps(self.to_dict()), self.id]
@@ -126,7 +126,7 @@ class Document(object):
         returning_id = cur.fetchone()[0]
         self.id = str(returning_id)
 
-    def to_dict(self):
+    def to_dict(self, redacted=None):
         result = {}
         for prop, typ in self.__types.items():
             if prop == 'id':
@@ -134,7 +134,12 @@ class Document(object):
             if isinstance(getattr(self, prop), type(datetime.datetime.now())):
                 result.update({prop: getattr(self, prop).strftime(self.__datetime_format)})
             else:
-                result.update({prop: getattr(self, prop)})
+                MAXIMUM_VALUE_LENGTH = 100  # Limit in order to prevent excessively long data, such as base 64
+                value_length = len(str(getattr(self, prop)))
+                if redacted and value_length > MAXIMUM_VALUE_LENGTH:
+                    result.update({prop: '{}... redacted'.format(str(getattr(self, prop))[:MAXIMUM_VALUE_LENGTH])})
+                else:
+                    result.update({prop: getattr(self, prop)})
         return result
 
 #    @classmethod

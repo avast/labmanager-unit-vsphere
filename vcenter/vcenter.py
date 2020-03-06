@@ -71,7 +71,7 @@ class VCenter:
         :param datastore_cluster_name:
         :return: datastore cluster or None
         """
-        data_clusters = self.__get_objects_list_from_container(self.content, vim.StoragePod)
+        data_clusters = self.__get_objects_list_from_container(self.content.rootFolder, vim.StoragePod)
         for dc in data_clusters:
                 if dc.name == datastore_cluster_name:
                     return dc
@@ -472,10 +472,13 @@ class VCenter:
         """
         datastore, path = self._take_screenshot_to_datastore(uuid=uuid)
         screenshot_data_b64 = None
-
+        self.__logger.debug(f'datastore: {datastore}, path: {path}')
         if datastore is not None or path is not None:
             screenshot_data = self.get_file_bytes_from_datastore(datastore_name=datastore, remote_path_to_file=path)
-            screenshot_data_b64 = base64.b64encode(screenshot_data)
+            if screenshot_data:
+                screenshot_data_b64 = base64.b64encode(screenshot_data)
+            else:
+                settings.raven.captureMessage('Error obtaining screenshot data')
 
         return screenshot_data_b64
 
@@ -527,7 +530,13 @@ class VCenter:
 
         for i in range(3):
             try:
-                resp = requests.get(url=url, verify=False, headers={'Cookie': self._connection_cookie})
+                # resp = requests.get(url=url, verify=False, headers={'Cookie': self._connection_cookie})
+                # the cookie usage was dropped because the new solution improved stability
+                resp = requests.get(
+                    url=url,
+                    verify=False,
+                    auth=(settings.app['vsphere']['username'], settings.app['vsphere']['password'])
+                )
                 if resp.status_code == 200:
                     # download ok, save return path
                     return resp.content
@@ -535,9 +544,11 @@ class VCenter:
                     # try again
                     msg = f'Download of {remote_path_to_file} (retry {i}) failed with status code: {resp.status_code}'
                     self.__logger.warning(msg)
+                    self.__sleep_between_tries()
                     continue
             except Exception as e:
                 self.__logger.warning(f'Downloading of {remote_path_to_file} (retry {i}) failed: {e}')
+                settings.raven.captureException(exc_info=True)
 
         # failed, nothing to return
         return None
@@ -646,7 +657,13 @@ class VCenter:
             return result
 
     def wait_for_task(self, task):
-        while (task.info.state == 'running' or task.info.state == 'queued'):
+        # this function is as ugly as possible but written in this way for stability purposes.
+        # the number of callings to pyvmomi library is restricted as much as possible.
+        state = None
+        while (True):
+            state = task.info.state
+            if state == 'success' or state == 'error':
+                break
             message = "no-message"
             progress = "n/a"
             try:
@@ -659,13 +676,15 @@ class VCenter:
                 progress,
                 message
             ))
-            time.sleep(1)
+            time.sleep(0.5)
+
+        result = task.info.result
         self.__logger.debug('Task finished with status: {}, return value: {}'.format(
-            task.info.state,
-            task.info.result,
-        )
-        )
-        return task.info.result
+            state,
+            result,
+        ))
+
+        return result
 
     class VmFolders:
 

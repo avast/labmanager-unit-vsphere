@@ -16,6 +16,7 @@ class Machine(Document):
     nos_id = trString
     machine_name = trString
     machine_search_link = trString
+    screenshots = trList
 
     _defaults = {
                     'state': 'created',
@@ -24,5 +25,6 @@ class Machine(Document):
                     'ip_addresses': [],
                     'nos_id': '',
                     'machine_name': '',
-                    'machine_search_link': ''
+                    'machine_search_link': '',
+                    'screenshots': [],
                 }
