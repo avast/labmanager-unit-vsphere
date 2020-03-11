@@ -500,8 +500,13 @@ class VCenter:
             memory=True,
             quiesce=False
         )
-        self.wait_for_task(snapshot_task)
-        self.__logger.debug(f'<- take_snapshot())')
+        snap_obj = self.wait_for_task(snapshot_task)
+        try:
+            result = snap_obj.vm.config.instanceUuid == uuid
+        except Exception:
+            result = False
+        self.__logger.debug(f'<- take_snapshot(): {result}')
+        return result
 
     def remove_snapshot(self, uuid, snapshot_name):
         self.__logger.debug(f'-> remove_snapshot({uuid}, {snapshot_name})')

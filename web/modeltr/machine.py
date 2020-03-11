@@ -17,6 +17,7 @@ class Machine(Document):
     machine_name = trString
     machine_search_link = trString
     screenshots = trList
+    snapshots = trList
 
     _defaults = {
                     'state': 'created',
@@ -27,4 +28,5 @@ class Machine(Document):
                     'machine_name': '',
                     'machine_search_link': '',
                     'screenshots': [],
+                    'snapshots': [],
                 }

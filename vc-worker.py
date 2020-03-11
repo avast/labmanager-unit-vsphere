@@ -182,7 +182,7 @@ def enqueue_get_info_request(request, machine, conn):
     ).save(conn=conn)
 
 
-def action_take_screenshot(request, machine, vc, action, conn):
+def action_take_screenshot(request, machine, vc, conn):
     screenshot_data = vc.take_screenshot(machine.provider_id)
     if request.subject_id:
         ss = data.Screenshot.get_one_for_update({'_id': request.subject_id}, conn=conn)
@@ -195,6 +195,19 @@ def action_take_screenshot(request, machine, vc, action, conn):
         ss.save(conn=conn)
     else:
         settings.raven.captureMessage('Error obtaining subject_id from Request')
+    return {'machine.state': '<unchanged>'}
+
+
+def action_take_snapshot(request, machine, vc, conn):
+    if request.subject_id:
+        snap_ro = data.Snapshot.get_one({'_id': request.subject_id}, conn=conn)
+        result = vc.take_snapshot(uuid=machine.provider_id, snapshot_name=snap_ro.name)
+        snap = data.Snapshot.get_one_for_update({'_id': request.subject_id}, conn=conn)
+        snap.status = 'success' if result is True else 'failed'
+        snap.save(conn=conn)
+    else:
+        settings.raven.captureMessage('Error obtaining subject_id from Request')
+
     return {'machine.state': '<unchanged>'}
 
 
@@ -235,7 +248,9 @@ def process_other_actions(conn, action, vc):
             action_get_info(request, machine_ro, vc, action, conn)
             return
         elif request_type == 'take_screenshot':
-            action_result = action_take_screenshot(request, machine_ro, vc, action, conn)
+            action_result = action_take_screenshot(request, machine_ro, vc, conn)
+        elif request_type == 'take_snapshot':
+            action_result = action_take_snapshot(request, machine_ro, vc, conn)
         else:
             logger.warn('unknown request: {} is going to succeed'.format(request_type))
 
