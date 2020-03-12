@@ -1,7 +1,7 @@
 from sanic import Blueprint
 import web.modeltr as data
 import logging
-from sanic.response import json as sjson
+import sanic.exceptions
 
 from sanic import Blueprint
 
@@ -38,3 +38,29 @@ async def take_snapshot(request, machine_id):
         },
         'is_last': True,
     }
+
+@snapshots.route('/machines/<machine_id>/snapshots/<snapshot_id>', methods=['PUT'])
+async def restore_snapshot(request, machine_id, snapshot_id):
+    with data.Connection.use() as conn:
+        action = request.headers['json_params'].get('action')
+        if action is None:
+            raise sanic.exceptions.InvalidUsage('\'action\' is missing in passed data!')
+        elif action == 'restore':
+            machine_ro = data.Machine.get_one({'_id': machine_id}, conn=conn)
+            new_request = data.Request(state='created', type='restore_snapshot')
+            new_request.machine = machine_ro.id
+            new_request.subject_id = snapshot_id
+            new_request.save(conn=conn)
+
+            # begin snapshot restoration
+            data.Action(type='other', request=new_request.id).save(conn=conn)
+
+            # TODO what to return?
+            return {
+                'result': {'snapshot_id': snapshot_id},
+                'is_last': True,
+            }
+
+        else:
+            raise sanic.exceptions.InvalidUsage(f'Invalid \'action\' value: {action}')
+
