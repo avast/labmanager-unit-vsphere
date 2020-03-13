@@ -2,6 +2,7 @@ from sanic import Blueprint
 import web.modeltr as data
 import logging
 import sanic.exceptions
+import sanic.response
 
 from sanic import Blueprint
 
@@ -32,12 +33,15 @@ async def take_snapshot(request, machine_id):
 
         # begin snapshot preparation
         data.Action(type='other', request=new_request.id).save(conn=conn)
-    return {
-        'result': {
-            'snapshot_id': new_snapshot.id,
-        },
-        'is_last': True,
-    }
+        return sanic.response.json(
+            {"responses": [{
+                "type": "request_id",
+                "request_id": new_request.id,
+                "snapshot_id": new_snapshot.id,
+                "is_last": True
+            }]},
+            status=200)
+
 
 @snapshots.route('/machines/<machine_id>/snapshots/<snapshot_id>', methods=['PUT'])
 async def restore_snapshot(request, machine_id, snapshot_id):
@@ -55,11 +59,13 @@ async def restore_snapshot(request, machine_id, snapshot_id):
             # begin snapshot restoration
             data.Action(type='other', request=new_request.id).save(conn=conn)
 
-            # TODO what to return?
-            return {
-                'result': {'snapshot_id': snapshot_id},
-                'is_last': True,
-            }
+            return sanic.response.json(
+                {"responses": [{
+                    "type": "request_id",
+                    "request_id": new_request.id,
+                    "is_last": True
+                }]},
+                status=200)
 
         else:
             raise sanic.exceptions.InvalidUsage(f'Invalid \'action\' value: {action}')
