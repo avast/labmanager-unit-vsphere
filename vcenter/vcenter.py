@@ -501,10 +501,7 @@ class VCenter:
             quiesce=False
         )
         snap_obj = self.wait_for_task(snapshot_task)
-        try:
-            result = snap_obj.vm.config.instanceUuid == uuid
-        except Exception:
-            result = False
+        result = snapshot_task.info.state == 'success' and snapshot_task.info.error is None
         self.__logger.debug(f'<- take_snapshot(): {result}')
         return result
 

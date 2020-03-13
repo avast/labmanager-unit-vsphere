@@ -205,6 +205,12 @@ def action_take_snapshot(request, machine, vc, conn):
         snap = data.Snapshot.get_one_for_update({'_id': request.subject_id}, conn=conn)
         snap.status = 'success' if result is True else 'failed'
         snap.save(conn=conn)
+        if result is True:
+            # attach snapshot from machine if creating was successful
+            machine = data.Machine.get_one_for_update({'_id': machine.id}, conn=conn)
+            machine.snapshots.append(snap.id)
+            machine.save(conn=conn)
+
     else:
         settings.raven.captureMessage('Error obtaining subject_id from Request')
 
@@ -224,6 +230,24 @@ def action_restore_snapshot(request, machine, vc, conn):
 
     return {'machine.state': '<unchanged>'}
 
+
+# TODO deduplicate with 'action_take_snapshot()' later
+def action_delete_snapshot(request, machine, vc, conn):
+    if request.subject_id:
+        snap_ro = data.Snapshot.get_one({'_id': request.subject_id}, conn=conn)
+        result = vc.remove_snapshot(uuid=machine.provider_id, snapshot_name=snap_ro.name)
+        snap = data.Snapshot.get_one_for_update({'_id': request.subject_id}, conn=conn)
+        snap.status = 'success' if result is True else 'failed'
+        snap.save(conn=conn)
+        if result is True:
+            # detach snapshot from machine if remove was successful
+            machine = data.Machine.get_one_for_update({'_id': machine.id}, conn=conn)
+            machine.snapshots.remove(snap.id)
+            machine.save(conn=conn)
+    else:
+        settings.raven.captureMessage('Error obtaining subject_id from Request')
+
+    return {'machine.state': '<unchanged>'}
 
 def process_other_actions(conn, action, vc):
     logger = logging.getLogger('action_others')
@@ -267,6 +291,8 @@ def process_other_actions(conn, action, vc):
             action_result = action_take_snapshot(request, machine_ro, vc, conn)
         elif request_type == 'restore_snapshot':
             action_result = action_restore_snapshot(request, machine_ro, vc, conn)
+        elif request_type == 'delete_snapshot':
+            action_result = action_delete_snapshot(request, machine_ro, vc, conn)
         else:
             logger.warn('unknown request: {} is going to succeed'.format(request_type))
 
