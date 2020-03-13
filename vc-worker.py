@@ -249,6 +249,7 @@ def action_delete_snapshot(request, machine, vc, conn):
 
     return {'machine.state': '<unchanged>'}
 
+
 def process_other_actions(conn, action, vc):
     logger = logging.getLogger('action_others')
     logger.info('{}-{}->'.format(os.getpid(), action.id))

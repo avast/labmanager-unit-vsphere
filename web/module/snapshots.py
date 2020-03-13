@@ -1,7 +1,7 @@
 from sanic import Blueprint
 import web.modeltr as data
 import logging
-import sanic.exceptions
+from sanic.exceptions import InvalidUsage
 import sanic.response
 
 from sanic import Blueprint
@@ -43,11 +43,11 @@ async def restore_snapshot(request, machine_id, snapshot_id):
     with data.Connection.use() as conn:
         action = request.headers['json_params'].get('action')
         if action is None:
-            raise sanic.exceptions.InvalidUsage('\'action\' is missing in passed data!')
+            raise InvalidUsage('\'action\' is missing in passed data!')
         elif action == 'restore':
             machine_ro = data.Machine.get_one({'_id': machine_id}, conn=conn)
             if snapshot_id not in machine_ro.snapshots:
-                raise sanic.exceptions.InvalidUsage(f'Machine \'{machine_id}\' does not have snapshot \'{snapshot_id}\'!')
+                raise InvalidUsage(f'Machine \'{machine_id}\' does not have snapshot \'{snapshot_id}\'')
             new_request = data.Request(state='created', type='restore_snapshot')
             new_request.machine = machine_ro.id
             new_request.subject_id = snapshot_id
@@ -65,7 +65,7 @@ async def restore_snapshot(request, machine_id, snapshot_id):
                 status=200)
 
         else:
-            raise sanic.exceptions.InvalidUsage(f'Invalid \'action\' value: {action}')
+            raise InvalidUsage(f'Invalid \'action\' value: {action}')
 
 
 @snapshots.route('/machines/<machine_id>/snapshots/<snapshot_id>', methods=['DELETE'])
@@ -73,7 +73,7 @@ async def delete_snapshot(request, machine_id, snapshot_id):
     with data.Connection.use() as conn:
         machine_ro = data.Machine.get_one({'_id': machine_id}, conn=conn)
         if snapshot_id not in machine_ro.snapshots:
-            raise sanic.exceptions.InvalidUsage(f'Machine \'{machine_id}\' does not have snapshot \'{snapshot_id}\'!')
+            raise InvalidUsage(f'Machine \'{machine_id}\' does not have snapshot \'{snapshot_id}\'!')
 
         new_request = data.Request(state='created', type='delete_snapshot')
         new_request.machine = machine_id
@@ -90,4 +90,3 @@ async def delete_snapshot(request, machine_id, snapshot_id):
                 "is_last": True
             }]},
             status=200)
-
