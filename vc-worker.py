@@ -212,7 +212,7 @@ def action_take_snapshot(request, machine, vc, conn):
             machine.save(conn=conn)
 
     else:
-        settings.raven.captureMessage('Error obtaining subject_id from Request')
+        settings.raven.captureMessage('Error obtaining subject_id for take snapshot request')
 
     return {'machine.state': '<unchanged>'}
 
@@ -226,7 +226,7 @@ def action_restore_snapshot(request, machine, vc, conn):
         snap.status = 'success' if result is True else 'failed'
         snap.save(conn=conn)
     else:
-        settings.raven.captureMessage('Error obtaining subject_id from Request')
+        settings.raven.captureMessage('Error obtaining subject_id for restore snapshot request')
 
     return {'machine.state': '<unchanged>'}
 
@@ -245,7 +245,7 @@ def action_delete_snapshot(request, machine, vc, conn):
             machine.snapshots.remove(snap.id)
             machine.save(conn=conn)
     else:
-        settings.raven.captureMessage('Error obtaining subject_id from Request')
+        settings.raven.captureMessage('Error obtaining subject_id for delete snapshot request')
 
     return {'machine.state': '<unchanged>'}
 
