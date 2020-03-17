@@ -24,14 +24,23 @@ async def req_get_info(request, req_id):
     with data.Connection.use() as conn:
         asyncio.sleep(0.1)
         req = data.Request.get({'_id': req_id}, conn=conn).first()
-        result = [
-            {
-                'result': {
+        result_dict = {
                     'machine_id': req.machine,
                     'state': req.state,
                     'request_type': req.type,
                     'modified_at': req.to_dict()['modified_at'],
-                },
+                }
+
+        # TODO solve this better
+        # add requited result data based on request type
+        if req.type == 'take_snapshot':
+            snap_ro = data.Snapshot.get_one({'_id': req.subject_id}, conn=conn)
+            result_dict['id'] = snap_ro.id
+            result_dict['name'] = snap_ro.name
+
+        result = [
+            {
+                'result': result_dict,
                 'is_last': req.state in ['success', 'failed', 'errored']
             }]
         if req.state in ['errored', 'failed']:

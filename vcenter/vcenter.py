@@ -166,7 +166,6 @@ class VCenter:
                 return self.__find_snapshot_by_name(item.childSnapshotList, snapshot_name)
 
         raise ValueError('snapshot {} cannot be found'.format(snapshot_name))
-        return None
 
     def __search_machine_by_name(self, vm_name):
         for cnt in range(settings.app['vsphere']['retries']['default']):
@@ -229,6 +228,16 @@ class VCenter:
                         spec
                     )
         return task
+
+    def get_machine_by_uuid(self, uuid):
+        self.__logger.debug(f'-> get_machine_by_uuid({uuid})')
+        self.__check_connection()
+        vm = self.content.searchIndex.FindByUuid(None, uuid, True)
+        if vm is None:
+            raise Exception(f'machine {uuid} not found')
+
+        self.__logger.debug(f'<- get_machine_by_uuid: {vm}')
+        return vm
 
     def deploy(self, template_name, machine_name, **kwargs):
         self.__check_connection()
@@ -482,6 +491,39 @@ class VCenter:
 
         return screenshot_data_b64
 
+    def take_snapshot(self, uuid, snapshot_name) -> bool:
+        self.__logger.debug(f'-> take_snapshot({uuid}, {snapshot_name})')
+        vm = self.get_machine_by_uuid(uuid=uuid)
+        snapshot_task = vm.CreateSnapshot_Task(
+            name=snapshot_name,
+            description='',
+            memory=True,
+            quiesce=False
+        )
+        snap_obj = self.wait_for_task(snapshot_task)
+        result = snapshot_task.info.state == 'success' and snapshot_task.info.error is None
+        self.__logger.debug(f'<- take_snapshot(): {result}')
+        return result
+
+    def remove_snapshot(self, uuid, snapshot_name) -> bool:
+        self.__logger.debug(f'-> remove_snapshot({uuid}, {snapshot_name})')
+        vm = self.get_machine_by_uuid(uuid)
+        snap = self.search_for_snapshot(vm=vm, snapshot_name=snapshot_name)
+        remove_task = snap.RemoveSnapshot_Task(removeChildren=False)
+        self.wait_for_task(remove_task)
+        self.__logger.debug(f'<- remove_snapshot()')
+
+    def revert_snapshot(self, uuid, snapshot_name):
+        self.__logger.debug(f'-> revert_snapshot({uuid}, {snapshot_name})')
+        vm = self.get_machine_by_uuid(uuid)
+        snap = self.search_for_snapshot(vm=vm, snapshot_name=snapshot_name)
+        revert_task = snap.RevertToSnapshot_Task()
+        self.wait_for_task(revert_task)
+        # revert task does not give any result explicitly! So we check for 'success' and no error
+        result = revert_task.info.state == 'success' and revert_task.info.error is None
+        self.__logger.debug(f'<- revert_snapshot(): {result}')
+        return result
+
     # TODO rewrite others to use this one
     def __get_objects_list_from_container(self, container, object_type):
 
@@ -660,7 +702,7 @@ class VCenter:
         # this function is as ugly as possible but written in this way for stability purposes.
         # the number of callings to pyvmomi library is restricted as much as possible.
         state = None
-        while (True):
+        while True:
             state = task.info.state
             if state == 'success' or state == 'error':
                 break
