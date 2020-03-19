@@ -1,24 +1,8 @@
 from web.settings import Settings as settings
 
-from .base import trString, trList, trId, trSaveTimestamp
-from .base_enum import UnitEnumBase
+from .base import trString, trList, trId, trSaveTimestamp, trMachineState
+from .enums import MachineState
 from .document import *
-
-class MachineState(UnitEnumBase):
-
-    CREATED = 'created'
-    DEPLOYED = 'deployed'
-    RUNNING = 'running'
-    STOPPED = 'stopped'
-    UNDEPLOYED = 'undeployed'
-    FAILED = 'failed'
-
-    def can_be_changed(self) -> bool:
-        """
-        Machine state cannot be changed for failed and undeployed machines
-        :return: bool
-        """
-        return self not in [MachineState.UNDEPLOYED, MachineState.FAILED]
 
 
 class Machine(Document):
@@ -26,7 +10,7 @@ class Machine(Document):
     modified_at = trSaveTimestamp
     labels = trList
     custom_machine_name = trString
-    state = trString
+    state = trMachineState
     provider_id = trString
     requests = trList
     ip_addresses = trList
@@ -37,7 +21,7 @@ class Machine(Document):
     snapshots = trList
 
     _defaults = {
-                    'state': 'created',
+                    'state': MachineState.CREATED,
                     'unit': settings.app['unit_name'],
                     'labels': [],
                     'ip_addresses': [],

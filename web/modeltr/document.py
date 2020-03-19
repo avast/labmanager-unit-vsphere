@@ -2,6 +2,7 @@ import psycopg2
 import json
 from .base import trString, trList, trId, trSaveTimestamp, trLock
 from .base import __all__ as MODELTR_TYPES_LIST
+from .enums import StrEnumBase
 import datetime
 import inspect
 import logging
@@ -129,10 +130,15 @@ class Document(object):
     def to_dict(self, redacted=None):
         result = {}
         for prop, typ in self.__types.items():
+            # do not include ID to dict
             if prop == 'id':
                 continue
-            if isinstance(getattr(self, prop), type(datetime.datetime.now())):
+            # stringify timestamp
+            elif isinstance(getattr(self, prop), type(datetime.datetime.now())):
                 result.update({prop: getattr(self, prop).strftime(self.__datetime_format)})
+            # stringify enum
+            elif issubclass(typ, StrEnumBase):
+                result.update({prop: getattr(self, prop).value})
             else:
                 MAXIMUM_VALUE_LENGTH = 100  # Limit in order to prevent excessively long data, such as base 64
                 value_length = len(str(getattr(self, prop)))
@@ -163,19 +169,23 @@ class Document(object):
         record_id = record[0]
         record_data = record[2]
         new_document = cls(id=str(record_id))
-        for prop in record_data.keys():
-            # every field that is stored in the db and is not defined in model
-            # will be inaccessible
+        for prop, val in record_data.items():
+            # every field that is stored in the db and is not defined in model will be inaccessible
             if prop not in new_document.__types:
                 continue
-            if isinstance(datetime.datetime.now(), new_document.__types[prop]):
+            # treat timestamp special way
+            elif isinstance(val, type(datetime.datetime.now())):
                 setattr(
                         new_document,
                         prop,
-                        datetime.datetime.strptime(record_data[prop], cls.__datetime_format)
+                        datetime.datetime.strptime(val, cls.__datetime_format)
                 )
+            # convert strEnums back to instances
+            elif isinstance(val, StrEnumBase):
+                enum_type = new_document.__types[prop]
+                setattr(new_document, prop, enum_type(val))
             else:
-                setattr(new_document, prop, record_data[prop])
+                setattr(new_document, prop, val)
         return new_document
 
     @classmethod
