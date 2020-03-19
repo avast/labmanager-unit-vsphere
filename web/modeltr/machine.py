@@ -1,7 +1,24 @@
 from web.settings import Settings as settings
 
 from .base import trString, trList, trId, trSaveTimestamp
+from .base_enum import UnitEnumBase
 from .document import *
+
+class MachineState(UnitEnumBase):
+
+    CREATED = 'created'
+    DEPLOYED = 'deployed'
+    RUNNING = 'running'
+    STOPPED = 'stopped'
+    UNDEPLOYED = 'undeployed'
+    FAILED = 'failed'
+
+    def can_be_changed(self) -> bool:
+        """
+        Machine state cannot be changed for failed and undeployed machines
+        :return: bool
+        """
+        return self not in [MachineState.UNDEPLOYED, MachineState.FAILED]
 
 
 class Machine(Document):

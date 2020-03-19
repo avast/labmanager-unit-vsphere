@@ -15,6 +15,7 @@ import web.modeltr as data
 import vcenter.vcenter as vcenter
 import signal
 
+from web.modeltr.machine import MachineState
 
 logger = logging.getLogger(__name__)
 
@@ -99,7 +100,7 @@ def process_deploy_action(conn, action, vc):
         machine.machine_search_link = machine_info['machine_search_link']
         request.state = 'success'
         request.save(conn=conn)
-        machine.state = 'deployed'
+        machine.state = MachineState.DEPLOYED.value
         machine.save(conn=conn)
         logger.debug('updating action to be finished...')
         action.lock = -1
@@ -111,7 +112,7 @@ def process_deploy_action(conn, action, vc):
         request.state = 'failed'
         request.save(conn=conn)
         machine = data.Machine.get_one_for_update({'_id': request.machine}, conn=conn)
-        machine.state = 'errored'
+        machine.state = MachineState.FAILED.value
         machine.save(conn=conn)
         logger.debug('updating action to be finished...')
         action.lock = -1
@@ -123,17 +124,17 @@ def process_deploy_action(conn, action, vc):
 def action_undeploy(request, machine, vc):
     vc.stop(machine.provider_id)
     vc.undeploy(machine.provider_id)
-    return {"machine.state": 'undeployed'}
+    return MachineState.UNDEPLOYED
 
 
 def action_start(request, machine, vc):
     vc.start(machine.provider_id)
-    return {'machine.state': 'running'}
+    return MachineState.RUNNING
 
 
 def action_stop(request, machine, vc):
     vc.stop(machine.provider_id)
-    return {'machine.state': 'stopped'}
+    return MachineState.STOPPED
 
 
 def action_get_info(request, machine_ro, vc, action, conn):
@@ -195,7 +196,7 @@ def action_take_screenshot(request, machine, vc, conn):
         ss.save(conn=conn)
     else:
         settings.raven.captureMessage('Error obtaining subject_id from Request')
-    return {'machine.state': '<unchanged>'}
+    return None
 
 
 def action_take_snapshot(request, machine, vc, conn):
@@ -213,8 +214,7 @@ def action_take_snapshot(request, machine, vc, conn):
 
     else:
         settings.raven.captureMessage('Error obtaining subject_id for take snapshot request')
-
-    return {'machine.state': '<unchanged>'}
+    return None
 
 
 # TODO deduplicate with 'action_take_snapshot()' later
@@ -228,7 +228,7 @@ def action_restore_snapshot(request, machine, vc, conn):
     else:
         settings.raven.captureMessage('Error obtaining subject_id for restore snapshot request')
 
-    return {'machine.state': '<unchanged>'}
+    return None
 
 
 # TODO deduplicate with 'action_take_snapshot()' later
@@ -247,7 +247,7 @@ def action_delete_snapshot(request, machine, vc, conn):
     else:
         settings.raven.captureMessage('Error obtaining subject_id for delete snapshot request')
 
-    return {'machine.state': '<unchanged>'}
+    return None
 
 
 def process_other_actions(conn, action, vc):
@@ -276,34 +276,35 @@ def process_other_actions(conn, action, vc):
             logger.info('request aborted, cannot be done on a machine in such a state')
             return
 
-        action_result = {'machine.state': 'failed'}
         if request_type == 'undeploy':
-            action_result = action_undeploy(request, machine_ro, vc)
+            new_machine_state = action_undeploy(request, machine_ro, vc)
         elif request_type == 'start':
-            action_result = action_start(request, machine_ro, vc)
+            new_machine_state = action_start(request, machine_ro, vc)
         elif request_type == 'stop':
-            action_result = action_stop(request, machine_ro, vc)
+            new_machine_state = action_stop(request, machine_ro, vc)
         elif request_type == 'get_info':
             action_get_info(request, machine_ro, vc, action, conn)
             return
         elif request_type == 'take_screenshot':
-            action_result = action_take_screenshot(request, machine_ro, vc, conn)
+            new_machine_state = action_take_screenshot(request, machine_ro, vc, conn)
         elif request_type == 'take_snapshot':
-            action_result = action_take_snapshot(request, machine_ro, vc, conn)
+            new_machine_state = action_take_snapshot(request, machine_ro, vc, conn)
         elif request_type == 'restore_snapshot':
-            action_result = action_restore_snapshot(request, machine_ro, vc, conn)
+            new_machine_state = action_restore_snapshot(request, machine_ro, vc, conn)
         elif request_type == 'delete_snapshot':
-            action_result = action_delete_snapshot(request, machine_ro, vc, conn)
+            new_machine_state = action_delete_snapshot(request, machine_ro, vc, conn)
         else:
             logger.warn('unknown request: {} is going to succeed'.format(request_type))
+            # will not be actually saved, only for setting request as failed
+            new_machine_state = MachineState.FAILED
 
         if request_type in ['undeploy', 'start', 'stop']:  # only these requests can change machine state
-            machine = data.Machine.get_one_for_update({'_id': request.machine}, conn=conn)
-            if machine.state not in ['undeployed', 'failed']:  # theses states cannot be changed anymore
-                machine.state = action_result['machine.state']
-            machine.save(conn=conn)
+            if new_machine_state is not None and new_machine_state.can_be_changed():
+                machine = data.Machine.get_one_for_update({'_id': request.machine}, conn=conn)
+                machine.state = new_machine_state.value
+                machine.save(conn=conn)
 
-        request.state = 'success' if action_result['machine.state'] != 'failed' else 'failed'
+        request.state = 'success' if new_machine_state is not MachineState.FAILED else 'failed'
         request.save(conn=conn)
         logger.debug('updating action to be finished...')
         action.lock = -1
