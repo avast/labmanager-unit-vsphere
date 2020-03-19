@@ -130,22 +130,26 @@ class Document(object):
     def to_dict(self, redacted=None):
         result = {}
         for prop, typ in self.__types.items():
+            output_value = getattr(self, prop)
+
             # do not include ID to dict
             if prop == 'id':
                 continue
             # stringify timestamp
-            elif isinstance(getattr(self, prop), type(datetime.datetime.now())):
-                result.update({prop: getattr(self, prop).strftime(self.__datetime_format)})
+            elif isinstance(output_value, datetime.datetime):
+                output_value = output_value.strftime(self.__datetime_format)
             # stringify enum
             elif issubclass(typ, StrEnumBase):
-                result.update({prop: getattr(self, prop).value})
+                output_value = output_value.value
             else:
                 MAXIMUM_VALUE_LENGTH = 100  # Limit in order to prevent excessively long data, such as base 64
-                value_length = len(str(getattr(self, prop)))
+                value_length = len(str(output_value))
                 if redacted and value_length > MAXIMUM_VALUE_LENGTH:
-                    result.update({prop: '{}... redacted'.format(str(getattr(self, prop))[:MAXIMUM_VALUE_LENGTH])})
-                else:
-                    result.update({prop: getattr(self, prop)})
+                    val_redacted = str(output_value)[:MAXIMUM_VALUE_LENGTH]
+                    output_value = f'{val_redacted}... redacted'
+
+            result[prop] = output_value
+
         return result
 
 #    @classmethod
@@ -170,18 +174,20 @@ class Document(object):
         record_data = record[2]
         new_document = cls(id=str(record_id))
         for prop, val in record_data.items():
+            target_type = new_document.__types[prop]
+
             # every field that is stored in the db and is not defined in model will be inaccessible
             if prop not in new_document.__types:
                 continue
-            # treat timestamp special way
-            elif isinstance(val, type(datetime.datetime.now())):
+            # convert str to datetime.datetime instance
+            elif target_type == datetime.datetime:
                 setattr(
                         new_document,
                         prop,
                         datetime.datetime.strptime(val, cls.__datetime_format)
                 )
             # convert strEnums back to instances
-            elif isinstance(val, StrEnumBase):
+            elif issubclass(target_type, StrEnumBase):
                 enum_type = new_document.__types[prop]
                 setattr(new_document, prop, enum_type(val))
             else:

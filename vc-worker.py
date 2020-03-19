@@ -100,7 +100,7 @@ def process_deploy_action(conn, action, vc):
         machine.machine_search_link = machine_info['machine_search_link']
         request.state = 'success'
         request.save(conn=conn)
-        machine.state = MachineState.DEPLOYED.value
+        machine.state = MachineState.DEPLOYED
         machine.save(conn=conn)
         logger.debug('updating action to be finished...')
         action.lock = -1
@@ -112,7 +112,7 @@ def process_deploy_action(conn, action, vc):
         request.state = 'failed'
         request.save(conn=conn)
         machine = data.Machine.get_one_for_update({'_id': request.machine}, conn=conn)
-        machine.state = MachineState.FAILED.value
+        machine.state = MachineState.FAILED
         machine.save(conn=conn)
         logger.debug('updating action to be finished...')
         action.lock = -1
@@ -301,7 +301,7 @@ def process_other_actions(conn, action, vc):
         if request_type in ['undeploy', 'start', 'stop']:  # only these requests can change machine state
             if new_machine_state is not None and new_machine_state.can_be_changed():
                 machine = data.Machine.get_one_for_update({'_id': request.machine}, conn=conn)
-                machine.state = new_machine_state.value
+                machine.state = new_machine_state
                 machine.save(conn=conn)
 
         request.state = 'success' if new_machine_state is not MachineState.FAILED else 'failed'
