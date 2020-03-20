@@ -268,7 +268,7 @@ def process_other_actions(conn, action, vc):
         )
         )
 
-        if machine_ro.state in ['undeployed']:
+        if not machine_ro.state.can_be_changed():
             request.state = 'aborted'
             request.save(conn=conn)
             action.lock = -1
