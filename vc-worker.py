@@ -299,7 +299,8 @@ def process_other_actions(conn, action, vc):
             new_machine_state = MachineState.FAILED
 
         if request_type in ['undeploy', 'start', 'stop']:  # only these requests can change machine state
-            if new_machine_state is not None and new_machine_state.can_be_changed():
+            # save new state iff old state can be changed and we have some new state
+            if new_machine_state is not None and machine_ro.state.can_be_changed():
                 machine = data.Machine.get_one_for_update({'_id': request.machine}, conn=conn)
                 machine.state = new_machine_state
                 machine.save(conn=conn)
