@@ -122,8 +122,11 @@ def process_deploy_action(conn, action, vc):
 
 
 def action_undeploy(request, machine, vc):
-    vc.stop(machine.provider_id)
-    vc.undeploy(machine.provider_id)
+    try:
+        vc.stop(machine.provider_id)
+        vc.undeploy(machine.provider_id)
+    except Exception:
+        return MachineState.FAILED
     return MachineState.UNDEPLOYED
 
 
@@ -267,14 +270,14 @@ def process_other_actions(conn, action, vc):
                                                             machine_ro.provider_id
         )
         )
-
-        if not machine_ro.state.can_be_changed():
-            request.state = 'aborted'
-            request.save(conn=conn)
-            action.lock = -1
-            action.save(conn=conn)
-            logger.info('request aborted, cannot be done on a machine in such a state')
-            return
+        if request_type != 'undeploy':
+            if not machine_ro.state.can_be_changed():
+                request.state = 'aborted'
+                request.save(conn=conn)
+                action.lock = -1
+                action.save(conn=conn)
+                logger.info('request aborted, cannot be done on a machine in such a state')
+                return
 
         if request_type == 'undeploy':
             new_machine_state = action_undeploy(request, machine_ro, vc)
