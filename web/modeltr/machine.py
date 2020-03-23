@@ -1,6 +1,7 @@
 from web.settings import Settings as settings
 
-from .base import trString, trList, trId, trSaveTimestamp
+from .base import trString, trList, trId, trSaveTimestamp, trMachineState
+from .enums import MachineState
 from .document import *
 
 
@@ -9,7 +10,7 @@ class Machine(Document):
     modified_at = trSaveTimestamp
     labels = trList
     custom_machine_name = trString
-    state = trString
+    state = trMachineState
     provider_id = trString
     requests = trList
     ip_addresses = trList
@@ -20,7 +21,7 @@ class Machine(Document):
     snapshots = trList
 
     _defaults = {
-                    'state': 'created',
+                    'state': MachineState.CREATED,
                     'unit': settings.app['unit_name'],
                     'labels': [],
                     'ip_addresses': [],

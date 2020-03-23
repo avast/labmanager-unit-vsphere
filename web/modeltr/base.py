@@ -1,7 +1,7 @@
 import datetime
+from .enums import MachineState
 
-
-__all__ = ['trString', 'trList', 'trId', 'trSaveTimestamp', 'trLock', 'trInt', 'trTimestamp']
+__all__ = ['trString', 'trList', 'trId', 'trSaveTimestamp', 'trLock', 'trInt', 'trTimestamp', 'trMachineState']
 
 
 class trString(object):
@@ -37,3 +37,10 @@ class trSaveTimestamp(object):
 class trTimestamp(object):
     _default = datetime.datetime.now()
     _type = type(_default)
+
+# ------------- enums ---------------
+
+
+class trMachineState:
+    _default = MachineState.CREATED
+    _type = MachineState
