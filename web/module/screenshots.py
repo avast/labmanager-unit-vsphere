@@ -1,6 +1,5 @@
 from sanic import Blueprint
 import web.modeltr as data
-from web.modeltr.enums import RequestState
 import logging
 from sanic.response import json as sjson
 
@@ -21,7 +20,7 @@ async def take_screenshot(request, machine_id):
         machine.screenshots.append(new_screenshot.id)
         machine.save(conn=conn)
 
-        new_request = data.Request(state=RequestState.CREATED, type='take_screenshot')
+        new_request = data.Request(type='take_screenshot')
         new_request.machine = str(machine.id)
         new_request.subject_id = str(new_screenshot.id)
         new_request.save(conn=conn)
