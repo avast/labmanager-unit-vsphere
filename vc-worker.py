@@ -15,7 +15,7 @@ import web.modeltr as data
 import vcenter.vcenter as vcenter
 import signal
 
-from web.modeltr.enums import MachineState
+from web.modeltr.enums import MachineState,RequestState
 
 logger = logging.getLogger(__name__)
 
@@ -98,7 +98,7 @@ def process_deploy_action(conn, action, vc):
         machine.nos_id = machine_info['nos_id']
         machine.machine_name = machine_info['machine_name']
         machine.machine_search_link = machine_info['machine_search_link']
-        request.state = 'success'
+        request.state = RequestState.SUCCESS
         request.save(conn=conn)
         machine.state = MachineState.DEPLOYED
         machine.save(conn=conn)
@@ -109,7 +109,7 @@ def process_deploy_action(conn, action, vc):
         settings.raven.captureException(exc_info=True)
         logger.error('action_deploy exception: ', exc_info=True)
 
-        request.state = 'failed'
+        request.state = RequestState.FAILED
         request.save(conn=conn)
         machine = data.Machine.get_one_for_update({'_id': request.machine}, conn=conn)
         machine.state = MachineState.FAILED
@@ -156,11 +156,11 @@ def action_get_info(request, machine_ro, vc, action, conn):
     if len(info['ip_addresses']) != 0:
         machine.ip_addresses = info['ip_addresses']
         machine.save(conn=conn)
-        request.state = 'success'
+        request.state = RequestState.SUCCESS
         action.lock = -1
     else:
         machine.save(conn=conn)
-        request.state = 'delayed'
+        request.state = RequestState.DELAYED
         action.repetitions -= 1
         action.next_try = datetime.datetime.now() + datetime.timedelta(
             seconds=random.randint(action.delay, action.delay+3)
@@ -272,7 +272,7 @@ def process_other_actions(conn, action, vc):
         )
         if request_type != 'undeploy':
             if not machine_ro.state.can_be_changed():
-                request.state = 'aborted'
+                request.state = RequestState.ABORTED
                 request.save(conn=conn)
                 action.lock = -1
                 action.save(conn=conn)
@@ -308,7 +308,7 @@ def process_other_actions(conn, action, vc):
                 machine.state = new_machine_state
                 machine.save(conn=conn)
 
-        request.state = 'success' if new_machine_state is not MachineState.FAILED else 'failed'
+        request.state = RequestState.SUCCESS if new_machine_state is not MachineState.FAILED else RequestState.FAILED
         request.save(conn=conn)
         logger.debug('updating action to be finished...')
         action.lock = -1

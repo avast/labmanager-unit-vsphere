@@ -4,6 +4,7 @@ from sanic.exceptions import abort
 from sanic import Blueprint
 
 import web.modeltr as data
+from web.modeltr.enums import RequestState
 
 import web.middleware.obtain_request
 import sanic.exceptions
@@ -45,7 +46,7 @@ async def machine_deploy(request):
     check_payload_deploy(request)
 
     with data.Connection.use() as conn:
-        new_request = data.Request(state='created', type='deploy')
+        new_request = data.Request(state=RequestState.CREATED, type='deploy')
         new_request.save(conn=conn)
 
         new_machine = data.Machine(

@@ -1,5 +1,6 @@
 from sanic import Blueprint
 import web.modeltr as data
+from web.modeltr.enums import RequestState
 import logging
 from sanic.exceptions import InvalidUsage
 import sanic.response
@@ -21,7 +22,7 @@ async def take_snapshot(request, machine_id):
         new_snapshot = data.Snapshot(machine=machine_id, name=snapshot_name)
         new_snapshot.save(conn=conn)
 
-        new_request = data.Request(state='created', type='take_snapshot')
+        new_request = data.Request(state=RequestState.CREATED, type='take_snapshot')
         new_request.machine = machine_id
         new_request.subject_id = new_snapshot.id
         new_request.save(conn=conn)
@@ -48,7 +49,7 @@ async def restore_snapshot(request, machine_id, snapshot_id):
             machine_ro = data.Machine.get_one({'_id': machine_id}, conn=conn)
             if snapshot_id not in machine_ro.snapshots:
                 raise InvalidUsage(f'Machine \'{machine_id}\' does not have snapshot \'{snapshot_id}\'')
-            new_request = data.Request(state='created', type='restore_snapshot')
+            new_request = data.Request(state=RequestState.CREATED, type='restore_snapshot')
             new_request.machine = machine_ro.id
             new_request.subject_id = snapshot_id
             new_request.save(conn=conn)
@@ -75,7 +76,7 @@ async def delete_snapshot(request, machine_id, snapshot_id):
         if snapshot_id not in machine_ro.snapshots:
             raise InvalidUsage(f'Machine \'{machine_id}\' does not have snapshot \'{snapshot_id}\'!')
 
-        new_request = data.Request(state='created', type='delete_snapshot')
+        new_request = data.Request(state=RequestState.CREATED, type='delete_snapshot')
         new_request.machine = machine_id
         new_request.subject_id = snapshot_id
         new_request.save(conn=conn)
