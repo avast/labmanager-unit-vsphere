@@ -1,7 +1,15 @@
 import datetime
 from .enums import MachineState, RequestState
 
-__all__ = ['trString', 'trList', 'trId', 'trSaveTimestamp', 'trLock', 'trInt', 'trTimestamp', 'trMachineState', 'trRequestState']
+__all__ = ['trString',
+           'trList',
+           'trId',
+           'trSaveTimestamp',
+           'trLock',
+           'trInt',
+           'trTimestamp',
+           'trMachineState',
+           'trRequestState']
 
 
 class trString(object):

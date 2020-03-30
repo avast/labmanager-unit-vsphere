@@ -15,7 +15,7 @@ import web.modeltr as data
 import vcenter.vcenter as vcenter
 import signal
 
-from web.modeltr.enums import MachineState,RequestState
+from web.modeltr.enums import MachineState, RequestState
 
 logger = logging.getLogger(__name__)
 
