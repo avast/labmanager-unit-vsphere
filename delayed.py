@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 from web.settings import Settings as settings
+from web.modeltr.enums import RequestState
 import logging
 import datetime
 import threading
@@ -45,7 +46,7 @@ if __name__ == '__main__':
                                                                     {'_id': action.request},
                                                                     conn=conn
                         )
-                        request.state = 'timeouted'
+                        request.state = RequestState.TIMEOUTED
                         request.save(conn=conn)
                         action.lock = -1
                         action.save(conn=conn)

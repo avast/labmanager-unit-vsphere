@@ -26,7 +26,7 @@ async def req_get_info(request, req_id):
         req = data.Request.get({'_id': req_id}, conn=conn).first()
         result_dict = {
                     'machine_id': req.machine,
-                    'state': req.state,
+                    'state': str(req.state),
                     'request_type': req.type,
                     'modified_at': req.to_dict()['modified_at'],
                 }
@@ -41,9 +41,9 @@ async def req_get_info(request, req_id):
         result = [
             {
                 'result': result_dict,
-                'is_last': req.state in ['success', 'failed', 'errored']
+                'is_last': req.state.has_finished()
             }]
-        if req.state in ['errored', 'failed']:
+        if req.state.is_error():
             result[0]['is_last'] = False
             result.append({
                 'exception': 'request failed',

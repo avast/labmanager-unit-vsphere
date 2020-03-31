@@ -1,7 +1,15 @@
 import datetime
-from .enums import MachineState
+from .enums import MachineState, RequestState
 
-__all__ = ['trString', 'trList', 'trId', 'trSaveTimestamp', 'trLock', 'trInt', 'trTimestamp', 'trMachineState']
+__all__ = ['trString',
+           'trList',
+           'trId',
+           'trSaveTimestamp',
+           'trLock',
+           'trInt',
+           'trTimestamp',
+           'trMachineState',
+           'trRequestState']
 
 
 class trString(object):
@@ -44,3 +52,8 @@ class trTimestamp(object):
 class trMachineState:
     _default = MachineState.CREATED
     _type = MachineState
+
+
+class trRequestState:
+    _default = RequestState.CREATED
+    _type = RequestState

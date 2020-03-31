@@ -25,3 +25,18 @@ class MachineState(StrEnumBase):
         :return: bool
         """
         return self not in [MachineState.UNDEPLOYED, MachineState.FAILED]
+
+
+class RequestState(StrEnumBase):
+    CREATED = 'created'
+    SUCCESS = 'success'
+    FAILED = 'failed'
+    DELAYED = 'delayed'
+    TIMEOUTED = 'timeouted'
+    ABORTED = 'aborted'
+
+    def has_finished(self):
+        return self is RequestState.SUCCESS or self.is_error()
+
+    def is_error(self):
+        return self in [RequestState.FAILED, RequestState.TIMEOUTED, RequestState.ABORTED]
