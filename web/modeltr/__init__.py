@@ -1,3 +1,4 @@
+from .enums import *
 from .connection import *
 from .document import *
 from .machine import *

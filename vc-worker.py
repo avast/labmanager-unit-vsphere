@@ -15,7 +15,7 @@ import web.modeltr as data
 import vcenter.vcenter as vcenter
 import signal
 
-from web.modeltr.enums import MachineState, RequestState
+from web.modeltr.enums import MachineState, RequestState, RequestType
 
 logger = logging.getLogger(__name__)
 
@@ -173,7 +173,7 @@ def action_get_info(request, machine_ro, vc, action, conn):
 def enqueue_get_info_request(request, machine, conn):
     # create another task to get info about that machine
     logger.debug('creating another get_info action for {}'.format(request.machine))
-    new_request = data.Request(type='get_info', machine=str(machine.id))
+    new_request = data.Request(type=RequestType.GET_INFO, machine=str(machine.id))
     new_request.save(conn=conn)
     machine.requests.append(new_request.id)
     machine.save(conn=conn)
@@ -270,7 +270,7 @@ def process_other_actions(conn, action, vc):
                                                             machine_ro.provider_id
         )
         )
-        if request_type != 'undeploy':
+        if request_type is not RequestType.UNDEPLOY:
             if not machine_ro.state.can_be_changed():
                 request.state = RequestState.ABORTED
                 request.save(conn=conn)
@@ -279,29 +279,30 @@ def process_other_actions(conn, action, vc):
                 logger.info('request aborted, cannot be done on a machine in such a state')
                 return
 
-        if request_type == 'undeploy':
+        if request_type is RequestType.UNDEPLOY:
             new_machine_state = action_undeploy(request, machine_ro, vc)
-        elif request_type == 'start':
+        elif request_type is RequestType.START:
             new_machine_state = action_start(request, machine_ro, vc)
-        elif request_type == 'stop':
+        elif request_type is RequestType.STOP:
             new_machine_state = action_stop(request, machine_ro, vc)
-        elif request_type == 'get_info':
+        elif request_type is RequestType.GET_INFO:
             action_get_info(request, machine_ro, vc, action, conn)
             return
-        elif request_type == 'take_screenshot':
+        elif request_type is RequestType.TAKE_SCREENSHOT:
             new_machine_state = action_take_screenshot(request, machine_ro, vc, conn)
-        elif request_type == 'take_snapshot':
+        elif request_type is RequestType.TAKE_SNAPSHOT:
             new_machine_state = action_take_snapshot(request, machine_ro, vc, conn)
-        elif request_type == 'restore_snapshot':
+        elif request_type is RequestType.RESTORE_SNAPSHOT:
             new_machine_state = action_restore_snapshot(request, machine_ro, vc, conn)
-        elif request_type == 'delete_snapshot':
+        elif request_type is RequestType.DELETE_SNAPSHOT:
             new_machine_state = action_delete_snapshot(request, machine_ro, vc, conn)
         else:
-            logger.warn('unknown request: {} is going to succeed'.format(request_type))
+            # this should not happen
+            settings.raven.captureMessage(f'Unhandled request type: {request_type}')
             # will not be actually saved, only for setting request as failed
             new_machine_state = MachineState.FAILED
 
-        if request_type in ['undeploy', 'start', 'stop']:  # only these requests can change machine state
+        if request_type.can_change_machine_state():
             # save new state iff old state can be changed and we have some new state
             if new_machine_state is not None and machine_ro.state.can_be_changed():
                 machine = data.Machine.get_one_for_update({'_id': request.machine}, conn=conn)
@@ -314,7 +315,7 @@ def process_other_actions(conn, action, vc):
         action.lock = -1
         action.save(conn=conn)
 
-        if request_type == 'start':
+        if request_type is RequestType.START:
             enqueue_get_info_request(request, machine, conn)
 
     except Exception as e:
