@@ -1,13 +1,13 @@
 import web.settings
 import datetime
-from .base import trString, trList, trId, trSaveTimestamp, trRequestState
+from .base import trString, trList, trId, trSaveTimestamp, trRequestState, trRequestType
 from .enums import RequestState
 from .document import *
 
 
 class Request(Document):
     modified_at = trSaveTimestamp
-    type = trString
+    type = trRequestType
     state = trRequestState
     machine = trString
     subject_id = trString

@@ -35,8 +35,23 @@ class RequestState(StrEnumBase):
     TIMEOUTED = 'timeouted'
     ABORTED = 'aborted'
 
-    def has_finished(self):
+    def has_finished(self) -> bool:
         return self is RequestState.SUCCESS or self.is_error()
 
-    def is_error(self):
+    def is_error(self) -> bool:
         return self in [RequestState.FAILED, RequestState.TIMEOUTED, RequestState.ABORTED]
+
+
+class RequestType(StrEnumBase):
+    DEPLOY = 'deploy'
+    UNDEPLOY = 'undeploy'
+    START = 'start'
+    STOP = 'stop'
+    GET_INFO = 'get_info'
+    TAKE_SCREENSHOT = 'take_screenshot'
+    TAKE_SNAPSHOT = 'take_snapshot'
+    RESTORE_SNAPSHOT = 'restore_snapshot'
+    DELETE_SNAPSHOT = 'delete_snapshot'
+
+    def can_change_machine_state(self) -> bool:
+        return self in [RequestType.START, RequestType.STOP, RequestType.DEPLOY, RequestType.UNDEPLOY]

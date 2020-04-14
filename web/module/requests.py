@@ -27,13 +27,13 @@ async def req_get_info(request, req_id):
         result_dict = {
                     'machine_id': req.machine,
                     'state': str(req.state),
-                    'request_type': req.type,
+                    'request_type': str(req.type),
                     'modified_at': req.to_dict()['modified_at'],
                 }
 
         # TODO solve this better
         # add requited result data based on request type
-        if req.type == 'take_snapshot':
+        if req.type is data.RequestType.TAKE_SNAPSHOT:
             snap_ro = data.Snapshot.get_one({'_id': req.subject_id}, conn=conn)
             result_dict['id'] = snap_ro.id
             result_dict['name'] = snap_ro.name
