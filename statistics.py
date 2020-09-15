@@ -24,20 +24,24 @@ def load_config(config_file, env):
 def obtain_statistics(cluster, endpoint, headers, host, port, stats_path):
     logger.info("sending statistics for cluster: {}".format(cluster))
     # get data
-    response = requests.get(
-        '{}capabilities'.format(endpoint),
-        headers=headers,
-        verify=False
-    )
-
-    if response.status_code != 200:
-        logger.warning(
-            "cannot get capabilities of cluster {}, stats not available!".format(cluster)
+    try:
+        response = requests.get(
+            '{}capabilities'.format(endpoint),
+            headers=headers,
+            verify=False
         )
+        if response.status_code != 200:
+            logger.warning(
+                "cannot get capabilities of cluster {}, stats not available!".format(cluster)
+            )
 
-    out_json = response.json()
-    maximum = out_json['responses'][0]['result']['slot_limit']
-    free = out_json['responses'][0]['result']['free_slots']
+        out_json = response.json()
+        maximum = out_json['responses'][0]['result']['slot_limit']
+        free = out_json['responses'][0]['result']['free_slots']
+    except Exception as ex:
+        logger.warn("Exception while obtaining capabilities occured: {}\n\nskipped\n".format(ex))
+        return
+
     consumed = maximum - free
     timestamp = str(datetime.strftime(datetime.now(), '%s'))
     out_string = "{}.{}.count {} {}\n{}.{}.used {} {}\n{}.{}.percent {} {}\n".format(
@@ -56,11 +60,14 @@ def obtain_statistics(cluster, endpoint, headers, host, port, stats_path):
     )
 
     # open socket
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-        s.connect((host, port))
-        # write data
-        s.sendall(bytes(out_string, 'utf-8'))
-        # close socket
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            s.connect((host, port))
+            # write data
+            s.sendall(bytes(out_string, 'utf-8'))
+            # close socket
+    except Exception as ex:
+        logger.warn("Exception while sending stats occured: {}\n\nskipped\n".format(ex))
 
 
 if __name__ == '__main__':
@@ -86,6 +93,6 @@ if __name__ == '__main__':
                 )
 
             logger.info('')
-        logger.info('')
+        logger.info('=====================================')
         logger.info('')
         time.sleep(sleep_interval)
