@@ -262,7 +262,8 @@ class VCenter:
                                                                           template.name))
                 self.__logger.debug('parent: {}'.format(template.parent._GetMoId()))
                 self.__logger.debug('datastore: {}'.format(template.datastore[0].name))
-                self.__logger.debug('snapshot: {}'.format(template.snapshot.currentSnapshot))
+                if template.snapshot:
+                    self.__logger.debug('snapshot: {}'.format(template.snapshot.currentSnapshot))
                 task = self.__clone_template(
                     template,
                     machine_name,
