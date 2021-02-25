@@ -1,4 +1,5 @@
 import logging
+from collections import Iterable
 import yaml
 from deepmerge import Merger as dm
 import os
@@ -66,12 +67,24 @@ class Settings:
 
     raven = None
 
+    def __flatten(items):
+        """Yield items from any nested iterable; see Reference."""
+        for item in items:
+            if isinstance(item, Iterable) and not isinstance(item, (str, bytes)):
+                for sub_x in Settings.__flatten(item):
+                    yield sub_x
+            else:
+                yield item
+
     def configure():
+        config_file_section = Settings.__config[Settings.environ]
+        config_file_section['labels'] = \
+            list(Settings.__flatten(config_file_section['labels']))
         dm(
             [(list, ['append']), (dict, ['merge'])],
             ['override'],
             ['override']
-        ).merge(Settings.app, Settings.__config[Settings.environ])
+        ).merge(Settings.app, config_file_section)
         Settings.raven = raven.Client(
             dsn=Settings.app['raven']['dsn'],
             ignore_exceptions=[KeyboardInterrupt]
