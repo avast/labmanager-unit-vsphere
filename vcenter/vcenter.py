@@ -629,6 +629,22 @@ class VCenter:
             except Exception:
                 self.__sleep_between_tries()
 
+    def config_memcpu(self, uuid, **kwargs):
+        self.__logger.debug('config_memcpu')
+        self.__check_connection()
+        for i in range(settings.app['vsphere']['retries']['config_network']):
+            try:
+
+                vm = self.content.searchIndex.FindByUuid(None, uuid, True)
+                config = vim.vm.ConfigSpec()
+                config.numCPUs = 4
+                config.memoryMB = 8192
+                task = vm.ReconfigVM_Task(spec=config)
+                self.wait_for_task(task)
+                break
+            except Exception:
+                self.__sleep_between_tries()
+
     def _get_machine_nos_id(self, vm, uuid):
         result = ''
         try:
