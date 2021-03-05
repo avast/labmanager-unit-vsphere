@@ -17,7 +17,10 @@ pyYaml  = "==4.2b1"
 deepmerge      ="==0.0.4"
 psycopg2-binary="==2.7.7"
 raven   = "==6.10.0"
+uvloop  = "==0.14.0"
 requests= ">=2.3.0"
+python_ldap    = "==3.3.1"
 
-#[requires]
-#python_version = ">=3.6"
+[requires]
+python_version = "3.6"
+
