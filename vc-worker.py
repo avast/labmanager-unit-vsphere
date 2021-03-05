@@ -82,6 +82,7 @@ def process_deploy_action(conn, action, vc):
                             )
             if network_interface:
                 vc.config_network(uuid, interface_name=network_interface)
+            vc.config_memcpu(uuid)
             machine_info = vc.get_machine_info(uuid)
         except Exception as e:
             settings.raven.captureException(exc_info=True)
