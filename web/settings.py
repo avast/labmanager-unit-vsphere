@@ -40,7 +40,8 @@ class Settings:
             },
             'service': {
                 'listen': '127.0.0.1',
-                'port': 8000
+                'port': 8000,
+                'personalised': False,
             },
             'retries': {
                 'db_connection': 6,

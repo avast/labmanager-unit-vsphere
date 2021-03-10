@@ -12,6 +12,7 @@ import web.module.uptime
 
 import web.middleware.auth
 import web.middleware.auth_ldap
+import web.middleware.auth_merger
 import web.middleware.json_params
 import web.middleware.json_response
 
@@ -46,6 +47,8 @@ if (settings.app['service'].get("auth_module", "<none>") == 'ldap_auth'):
     logger.debug("Registered ldap_auth sucessfully")
 else:
     lm_unit_webserver.register_middleware(web.middleware.auth.auth, 'request')
+lm_unit_webserver.register_middleware(web.middleware.auth_merger.auth, 'request')
+
 lm_unit_webserver.register_middleware(web.middleware.json_params.json_params, 'request')
 
 lm_unit_webserver.blueprint(web.module.machines.machines, url_prefix='/api/v4')

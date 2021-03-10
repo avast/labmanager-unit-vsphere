@@ -18,6 +18,7 @@ class MachineState(StrEnumBase):
     STOPPED = 'stopped'
     UNDEPLOYED = 'undeployed'
     FAILED = 'failed'
+    ERRORED = 'errored'
 
     def can_be_changed(self) -> bool:
         """

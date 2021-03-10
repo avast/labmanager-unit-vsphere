@@ -1,6 +1,6 @@
 from web.settings import Settings as settings
 
-from .base import trString, trList, trId, trSaveTimestamp, trMachineState
+from .base import trString, trList, trId, trSaveTimestamp, trMachineState, trHiddenString
 from .enums import MachineState
 from .document import *
 
@@ -19,6 +19,7 @@ class Machine(Document):
     machine_search_link = trString
     screenshots = trList
     snapshots = trList
+    owner = trHiddenString
 
     _defaults = {
                     'state': MachineState.CREATED,
@@ -30,4 +31,5 @@ class Machine(Document):
                     'machine_search_link': '',
                     'screenshots': [],
                     'snapshots': [],
+                    'owner': '<not_def>',
                 }

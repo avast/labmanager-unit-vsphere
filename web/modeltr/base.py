@@ -1,19 +1,27 @@
 import datetime
 from .enums import MachineState, RequestState, RequestType
 
-__all__ = ['trString',
-           'trList',
-           'trId',
-           'trSaveTimestamp',
-           'trLock',
-           'trInt',
-           'trTimestamp',
-           'trMachineState',
-           'trRequestState',
-           'trRequestType']
+__all__ = [
+            'trString',
+            'trList',
+            'trId',
+            'trSaveTimestamp',
+            'trLock',
+            'trInt',
+            'trTimestamp',
+            'trMachineState',
+            'trRequestState',
+            'trRequestType',
+            'trHiddenString',
+]
 
 
 class trString(object):
+    _default = ''
+    _type = type(_default)
+
+
+class trHiddenString(object):
     _default = ''
     _type = type(_default)
 

@@ -1,6 +1,6 @@
 import psycopg2
 import json
-from .base import trString, trList, trId, trSaveTimestamp, trLock
+from .base import trString, trList, trId, trSaveTimestamp, trLock, trHiddenString
 from .base import __all__ as MODELTR_TYPES_LIST
 from .enums import StrEnumBase
 import datetime
@@ -28,7 +28,10 @@ class Document(object):
 
     def __init__(self, **kwargs):
         types = {}
+        model_types = {}
         document_updated_property = None
+        self.__logger = logging.getLogger(__name__)
+
         if '_defaults' not in type(self).__dict__:
             self._defaults = {}
 
@@ -38,6 +41,7 @@ class Document(object):
             if inspect.isclass(member_value) and member_value.__name__ in MODELTR_TYPES_LIST:
                 # store types of each document entry
                 types.update({member_name: member_value._type})
+                model_types.update({member_name: member_value})
 
                 if member_value.__name__ == 'trSaveTimestamp':
                     document_updated_property = member_name
@@ -53,8 +57,8 @@ class Document(object):
                     setattr(self, member_name, kwargs[member_name])
 
         self.__types = types
+        self.__model_types = model_types
         self.__document_updated_property = document_updated_property
-
         # check for wrong arguments
         for arg in kwargs:
             if arg not in self.__types:
@@ -62,8 +66,6 @@ class Document(object):
 
         # setup collection name
         self.collection_name = type(self).__name__.lower()
-
-        self.__logger = logging.getLogger(__name__)
 
     def __check_types(self):
         for prop, typ in self.__types.items():
@@ -107,10 +109,10 @@ class Document(object):
         connection = self.__get_connection(**kwargs)
 
         cur = connection.get_cursor()
-        self.__logger.debug(self.to_dict(redacted=True))
+        self.__logger.debug(self.to_dict(redacted=True, show_hidden=True))
         cur.execute(
                     "update documents set data= %s where id = %s",
-                    [json.dumps(self.to_dict()), self.id]
+                    [json.dumps(self.to_dict(show_hidden=True)), self.id]
         )
         connection.wait_for_completion()
 
@@ -118,22 +120,26 @@ class Document(object):
         connection = self.__get_connection(**kwargs)
 
         cur = connection.get_cursor()
-        self.__logger.debug(self.to_dict())
+        self.__logger.debug(self.to_dict(show_hidden=True))
         cur.execute(
                     "insert into documents (type, data) VALUES(%s,%s) returning id;",
-                    [type(self).__name__.lower(), json.dumps(self.to_dict())]
+                    [type(self).__name__.lower(), json.dumps(self.to_dict(show_hidden=True))]
         )
         connection.wait_for_completion()
         returning_id = cur.fetchone()[0]
         self.id = str(returning_id)
 
-    def to_dict(self, redacted=None):
+    def to_dict(self, redacted=None, show_hidden=False):
         result = {}
         for prop, typ in self.__types.items():
             output_value = getattr(self, prop)
+            current_model_type = self.__model_types[prop].__name__
 
             # do not include ID to dict
             if prop == 'id':
+                continue
+            # do not show hidden strings if wanted
+            elif not show_hidden and current_model_type == "trHiddenString":
                 continue
             # stringify timestamp
             elif isinstance(output_value, datetime.datetime):
@@ -226,8 +232,8 @@ class Document(object):
         connection.wait_for_completion()
         # cur.execute("SELECT * FROM documents where id = %s;",[query["_id"]])
         if cur.rowcount == 0:
-            print(cur.rowcount)
-            print(cur.query)
+            logger = logging.getLogger(__name__)
+            logger.debug("0 records returned from: >>{}<<".format(cur.query))
         for item in cur.fetchall():
             result.append(cls._db_record_to_instance_pq(item))
         return result
