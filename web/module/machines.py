@@ -1,3 +1,4 @@
+from web.settings import Settings as settings
 from sanic.response import json as sjson
 import sanic.response
 from sanic.exceptions import abort
@@ -20,7 +21,7 @@ logger = logging.getLogger(__name__)
 machines = Blueprint('machines')
 
 
-def check_payload_deploy(request):
+async def check_payload_deploy(request):
     if 'json_params' in request.headers and 'labels' in request.headers['json_params']:
         return True
     raise sanic.exceptions.InvalidUsage(
@@ -42,16 +43,22 @@ def handle_exceptions(request, exception):
 
 @machines.route('/machines', methods=['POST'])
 async def machine_deploy(request):
-    check_payload_deploy(request)
-
+    await check_payload_deploy(request)
+    logger.debug("POST /machines wanted by: {}".format(request.headers["AUTHORISED_LOGIN"]))
     with data.Connection.use() as conn:
         new_request = data.Request(type=data.RequestType.DEPLOY)
         new_request.save(conn=conn)
-
-        new_machine = data.Machine(
-            labels=request.headers['json_params']['labels'],
-            requests=[new_request.id]
-        )
+        if settings.app['service']['personalised']:
+            new_machine = data.Machine(
+                labels=request.headers['json_params']['labels'],
+                requests=[new_request.id],
+                owner=request.headers["AUTHORISED_LOGIN"],
+            )
+        else:
+            new_machine = data.Machine(
+                labels=request.headers['json_params']['labels'],
+                requests=[new_request.id]
+            )
         new_machine.save(conn=conn)
 
         new_request.machine = str(new_machine.id)
@@ -66,6 +73,24 @@ async def machine_deploy(request):
     }
 
 
+async def get_machines(request, connection, **kwargs):
+    raw_args = request.raw_args
+    if 'flt' in kwargs:
+        raw_args = {**raw_args, **kwargs['flt']}
+    if settings.app['service']['personalised'] and \
+       request.headers.get("AUTHORIZED_AS", "None") == "user":
+        return data.Machine.get(
+            {**raw_args, **{'owner': request.headers["AUTHORISED_LOGIN"]}},
+            conn=connection
+        )
+    else:
+        return data.Machine.get(raw_args, conn=connection)
+
+
+async def show_hidden_strings(request):
+    return request.headers.get("AUTHORIZED_AS", "None") == "admin"
+
+
 @machines.route('/machines', methods=['GET'])
 async def machines_get_info(request):
     for key in request.raw_args.keys():
@@ -76,10 +101,13 @@ async def machines_get_info(request):
 
     with data.Connection.use() as conn:
         asyncio.sleep(0.1)
-        machines = data.Machine.get(request.raw_args, conn=conn)
+        machines = await get_machines(request, conn)
         output = []
         for machine in machines:
-            output.append({**machine.to_dict(), **{'id': machine.id}})
+            output.append({
+                **machine.to_dict(show_hidden=await show_hidden_strings(request)),
+                **{'id': machine.id}
+            })
 
     return {
             'result': output,
@@ -92,9 +120,11 @@ async def machine_get_info(request, machine_id):
     logger.debug('Current thread name: {}'. format(threading.current_thread().name))
     with data.Connection.use() as conn:
         asyncio.sleep(0.1)
-        req = data.Machine.get({'_id': machine_id}, conn=conn).first()
-        result = req.to_dict()
-
+        try:
+            req = (await get_machines(request, conn, flt={'_id': machine_id})).first()
+            result = req.to_dict(show_hidden=await show_hidden_strings(request))
+        except Exception as ex:
+            raise sanic.exceptions.InvalidUsage("Specified resource cannot be obtained")
     return {
             'result': result,
             'is_last': True
