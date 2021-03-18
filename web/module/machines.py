@@ -37,7 +37,7 @@ async def obtain_request(request):
 @machines.exception(sanic.exceptions.InvalidUsage)
 def handle_exceptions(request, exception):
     return {
-            'exception': ''.join(exception.args),
+            'exception': '|'.join(exception.args),
     }
 
 
@@ -78,7 +78,7 @@ async def get_machines(request, connection, **kwargs):
     if 'flt' in kwargs:
         raw_args = {**raw_args, **kwargs['flt']}
     if settings.app['service']['personalised'] and \
-       request.headers.get("AUTHORIZED_AS", "None") == "user":
+       request.headers.get("AUTHORISED_AS", "None") == "user":
         return data.Machine.get(
             {**raw_args, **{'owner': request.headers["AUTHORISED_LOGIN"]}},
             conn=connection
@@ -88,7 +88,7 @@ async def get_machines(request, connection, **kwargs):
 
 
 async def show_hidden_strings(request):
-    return request.headers.get("AUTHORIZED_AS", "None") == "admin"
+    return request.headers.get("AUTHORISED_AS", "None") == "admin"
 
 
 @machines.route('/machines', methods=['GET'])
@@ -132,6 +132,10 @@ async def machine_get_info(request, machine_id):
 
 
 async def check_machine_owner(machine, request):
+    if machine is None:
+        raise sanic.exceptions.InvalidUsage("Specified resource cannot be obtained")
+    if request.headers.get("AUTHORISED_AS", "None") == "admin":
+        return
     if settings.app['service']['personalised'] and \
        machine.owner != request.headers["AUTHORISED_LOGIN"]:
         raise sanic.exceptions.InvalidUsage("Specified resource cannot be altered")

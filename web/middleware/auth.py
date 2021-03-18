@@ -10,4 +10,4 @@ async def auth(request):
     if 'authorization' not in request.headers:
         abort(401)
 
-    request.headers['AUTHORIZED_AS'] = 'user'
+    request.headers['AUTHORISED_AS'] = 'user'
