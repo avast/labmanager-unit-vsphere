@@ -131,6 +131,12 @@ async def machine_get_info(request, machine_id):
     }
 
 
+async def check_machine_owner(machine, request):
+    if settings.app['service']['personalised'] and \
+       machine.owner != request.headers["AUTHORISED_LOGIN"]:
+        raise sanic.exceptions.InvalidUsage("Specified resource cannot be altered")
+
+
 @machines.route('/machines/<machine_id>', methods=['DELETE'])
 async def machine_get_info(request, machine_id):
     logger.debug('Current thread name: {}'. format(threading.current_thread().name))
@@ -138,6 +144,7 @@ async def machine_get_info(request, machine_id):
     with data.Connection.use() as conn:
         asyncio.sleep(0.1)
         machine = data.Machine.get_one_for_update({'_id': machine_id}, conn=conn)
+        await check_machine_owner(machine, request)
         new_request = data.Request(type=data.RequestType.UNDEPLOY, machine=str(machine_id))
         new_request.save(conn=conn)
         machine.requests.append(new_request.id)
@@ -164,6 +171,7 @@ async def machine_do_start_stop(request, machine_id):
     with data.Connection.use() as conn:
         asyncio.sleep(0.1)
         machine = data.Machine.get_one_for_update({'_id': machine_id}, conn=conn)
+        await check_machine_owner(machine, request)
         new_request = data.Request(type=request_type, machine=str(machine_id))
         new_request.save(conn=conn)
         machine.requests.append(new_request.id)
