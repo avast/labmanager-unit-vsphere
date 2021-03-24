@@ -13,6 +13,8 @@ logger = logging.getLogger()
 
 
 def get_ldap_connection(username, password):
+    if not settings.app['service']['ldap'].get('cert_check', True):
+        ldap.set_option(ldap.OPT_X_TLS_REQUIRE_CERT, ldap.OPT_X_TLS_NEVER)
     l_obj = ldap.initialize(settings.app['service']['ldap']['url'])
     l_obj.set_option(ldap.OPT_TIMEOUT, 8)
     l_obj.protocol_version = ldap.VERSION3
@@ -20,9 +22,17 @@ def get_ldap_connection(username, password):
         l_obj.simple_bind_s(username, password)
         return l_obj
     except Exception as ex:
-        logger.error(
-            "An exception occured when connecting to ldap: {}".format(ex)
-        )
+        logger.warning("Svc-like auth attempt failed, trying user-like attempt...")
+        try:
+            l_obj.simple_bind_s(
+                "{}@{}".format(username, settings.app['service']['ldap']['domain_name']),
+                password
+            )
+            return l_obj
+        except Exception as iex:
+            logger.error(
+                "An exception occured when connecting to ldap: {}".format(iex)
+            )
         return None
     return None
 
@@ -102,7 +112,7 @@ async def auth(request):
         if is_auth_as_user:
             request.headers['LDAP_AUTHORISED_LOGIN'] = auth_struct['username']
             request.headers['LDAP_AUTHORISED_DN'] = user_dn
-            request.headers['AUTHORIZED_AS'] = 'user'
+            request.headers['AUTHORISED_AS'] = 'user'
             return
 
         admin_group_dn = settings.app['service']['ldap']['agroup']
@@ -110,7 +120,7 @@ async def auth(request):
         if is_auth_as_admin:
             request.headers['LDAP_AUTHORISED_LOGIN'] = auth_struct['username']
             request.headers['LDAP_AUTHORISED_DN'] = user_dn
-            request.headers['AUTHORIZED_AS'] = 'admin'
+            request.headers['AUTHORISED_AS'] = 'admin'
             return
 
         return sanicjson({"error": "you are not authorized to see the content"}, 403)
