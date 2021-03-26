@@ -25,7 +25,7 @@ class Capabilities:
     async def fetch(forced=False):
         used_slots = Capabilities._slot_limit - Capabilities._free_slots
         logger.debug("Capabilities last check: {}".format(Capabilities._last_check))
-        caching_period = settings.app['service']['capabilities']['caching_period ']
+        caching_period = settings.app['service']['capabilities']['caching_period']
         caching_threshold = settings.app['service']['capabilities']['caching_enabled_threshold']
         if forced or \
            used_slots > int(Capabilities._slot_limit*(caching_threshold/100)) or \
