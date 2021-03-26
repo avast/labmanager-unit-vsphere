@@ -54,7 +54,7 @@ please wait till another slot is to be freed'
 @machines.route('/machines', methods=['POST'])
 async def machine_deploy(request):
     await check_payload_deploy(request)
-    logger.debug("POST /machines wanted by: {}".format(request.headers["AUTHORISED_LOGIN"]))
+    logger.debug("POST /machines wanted by: {}".format(request.headers.get("AUTHORISED_LOGIN", "<n/a>")))
     await check_resources()
     with data.Connection.use() as conn:
         new_request = data.Request(type=data.RequestType.DEPLOY)
