@@ -42,6 +42,13 @@ class Settings:
                 'listen': '127.0.0.1',
                 'port': 8000,
                 'personalised': False,
+                'capabilities': {
+                    # Each call to /capabilities induces 4 db requests
+                    # If the unit fullness is under caching_enabled_threshold
+                    # the db query is performed only once in the caching_period interval
+                    'caching_period': 15,             # in seconds
+                    'caching_enabled_threshold': 90,  # in percent
+                }
             },
             'retries': {
                 'db_connection': 6,

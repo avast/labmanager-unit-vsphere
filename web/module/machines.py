@@ -7,6 +7,7 @@ from sanic import Blueprint
 import web.modeltr as data
 
 import web.middleware.obtain_request
+import web.module.capabilities as capabilities
 import sanic.exceptions
 import json
 
@@ -41,10 +42,20 @@ def handle_exceptions(request, exception):
     }
 
 
+async def check_resources():
+    await capabilities.Capabilities.fetch(forced=True)
+    if capabilities.Capabilities.get_free_slots() < 1:
+        raise sanic.exceptions.InvalidUsage(
+                'no extra machine can be currently deployed, \
+please wait till another slot is to be freed'
+        )
+
+
 @machines.route('/machines', methods=['POST'])
 async def machine_deploy(request):
     await check_payload_deploy(request)
     logger.debug("POST /machines wanted by: {}".format(request.headers["AUTHORISED_LOGIN"]))
+    await check_resources()
     with data.Connection.use() as conn:
         new_request = data.Request(type=data.RequestType.DEPLOY)
         new_request.save(conn=conn)
