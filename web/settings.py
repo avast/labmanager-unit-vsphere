@@ -36,7 +36,9 @@ class Settings:
                     'default': 6,
                     'delay_period_min': 0,
                     'delay_period_max': 3
-                }
+                },
+                'datacenter': None,
+                'root_system_folder': None,
             },
             'service': {
                 'listen': '127.0.0.1',
