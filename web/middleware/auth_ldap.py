@@ -96,8 +96,15 @@ async def auth(request):
         )
 
     loop = asyncio.get_event_loop()
-    auth_struct = await parse_auth(request)
-    anonymized_passwd = await anonymize_password(auth_struct['password'])
+    try:
+        auth_struct = await parse_auth(request)
+        anonymized_passwd = await anonymize_password(auth_struct['password'])
+    except Exception as ex:
+        logger.warning("Not parsable auth header received: {}".format(ex))
+        return sanicjson(
+            {"error": "wrong authorization header received, you cannot be authenticated to access the service"},
+            401
+        )
 
     logger.debug("An attempt to auth: {}:{}".format(auth_struct['username'], anonymized_passwd))
     conn = await loop.run_in_executor(None, get_ldap_connection, auth_struct['username'], auth_struct['password'])
