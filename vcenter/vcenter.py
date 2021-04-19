@@ -167,11 +167,46 @@ class VCenter:
 
         raise ValueError('snapshot {} cannot be found'.format(snapshot_name))
 
+    def __determine_root_system_folder(self, dc_folder):
+        """
+            if root_system_folder is specified this tries to search for it and speeds up the deploy
+        """
+        root_system_folder_name = settings.app['vsphere']['root_system_folder']
+        if root_system_folder_name is not None:
+            root_system_folder = next(
+                (item for item in dc_folder.vmFolder.childEntity if item.name == root_system_folder_name),
+                dc_folder
+            )
+            if dc_folder == root_system_folder:
+                self.__logger.warn("root system folder: {} cannot be found; cfg: {}".format(
+                    root_system_folder_name,
+                    "config->vsphere->root_system_folder"
+                ))
+            return root_system_folder
+        return dc_folder
+
+    def __determine_dc_folder(self, root_folder):
+        """
+            Determines whether specific datacenter may be used to search for machines
+            if search is not successful it returns the origin
+            if search is successful it tries to locate the root folder of the system
+        """
+        datacenter_name = settings.app['vsphere']['datacenter']
+        if datacenter_name is not None:
+            dc_folder = next(
+                (item for item in root_folder.childEntity if item.name == datacenter_name),
+                root_folder
+            )
+            return self.__determine_root_system_folder(dc_folder)
+        return root_folder
+
     def __search_machine_by_name(self, vm_name):
         for cnt in range(settings.app['vsphere']['retries']['default']):
             try:
                 objView = self.content.viewManager.CreateContainerView(
-                                                                       self.content.rootFolder,
+                                                                       self.__determine_dc_folder(
+                                                                           self.content.rootFolder,
+                                                                       ),
                                                                        [vim.VirtualMachine],
                                                                        True
                 )
