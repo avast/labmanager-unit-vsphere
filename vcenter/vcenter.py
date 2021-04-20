@@ -17,6 +17,7 @@ import tempfile
 import uuid
 import urllib.request
 
+
 class VCenter:
 
     def __init__(self):
@@ -515,29 +516,35 @@ class VCenter:
         hcp_auth = settings.app['hcp']['auth']
         hcp_base_dir = settings.app['hcp']['base_dir']
 
-        hcp_filename= f'{machine_uuid}_{uuid.uuid4()}.png'
+        hcp_filename = f'{machine_uuid}_{uuid.uuid4()}.png'
         upload_url = f'{hcp_server}/rest/{hcp_base_dir}/{hcp_filename}'
-        put_request = urllib.request.Request(
-            upload_url,
-            method='PUT',
-            data=screenshot_data,
-        )
-        put_request.add_header('Content-Length', str(len(screenshot_data)))
-        put_request.add_header('Content-Type', 'multipart/form-data')
-        put_request.add_header('Authorization', hcp_auth)
-        ssl_context = ssl._create_unverified_context()
-        response = urllib.request.urlopen(
-            put_request,
-            context=ssl_context,
-            timeout=settings.app['hcp'].get('timeout', 120)
-        )
-        if response.code != 201:
-            settings.raven.captureMessage(
-                f'problem uploading data to hcp: {hcp_server}, {upload_url} -> {response.code}'
+        try:
+            put_request = urllib.request.Request(
+                upload_url,
+                method='PUT',
+                data=screenshot_data,
             )
+            put_request.add_header('Content-Length', str(len(screenshot_data)))
+            put_request.add_header('Content-Type', 'multipart/form-data')
+            put_request.add_header('Authorization', hcp_auth)
+            ssl_context = ssl._create_unverified_context()
+            response = urllib.request.urlopen(
+                put_request,
+                context=ssl_context,
+                timeout=settings.app['hcp'].get('timeout', 120)
+            )
+            if response.code != 201:
+                settings.raven.captureMessage(
+                    f'problem uploading data to hcp: {hcp_server}, {upload_url} -> {response.code}'
+                )
+        except Exception as ex:
+            settings.raven.captureException(exc_info=True)
+            self.__logger.error(f"Exception while sending data to hcp: {ex}")
+            raise ex
+
         return upload_url.replace('/rest/', '/hs3/')
 
-    def take_screenshot(self, uuid: str, store_to: str='db') -> str:
+    def take_screenshot(self, uuid: str, store_to: str = 'db') -> str:
         """
         Takes screenshot of VM and returns it as base64 encoded string or hcp url
         :param uuid: machine uuid
