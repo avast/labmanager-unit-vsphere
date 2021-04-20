@@ -50,7 +50,14 @@ class Settings:
                     # the db query is performed only once in the caching_period interval
                     'caching_period': 15,             # in seconds
                     'caching_enabled_threshold': 90,  # in percent
-                }
+                },
+                'screenshot_store': 'db', # hcp eventually
+            },
+            'hcp': {
+                'url': None,
+                'auth': None,
+                'base_dir':'ss',
+                'timeout': 120,
             },
             'retries': {
                 'db_connection': 6,

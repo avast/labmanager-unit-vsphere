@@ -14,7 +14,8 @@ import logging
 import re
 import random
 import tempfile
-
+import uuid
+import urllib.request
 
 class VCenter:
 
@@ -509,23 +510,53 @@ class VCenter:
         self.__logger.debug(f'<- take_screenshot: {datastore_name}, {screenshot_path}')
         return datastore_name, screenshot_path
 
-    def take_screenshot(self, uuid):
+    def _store_screenshot_to_hcp(self, machine_uuid: str, screenshot_data) -> str:
+        hcp_server = settings.app['hcp']['url']
+        hcp_auth = settings.app['hcp']['auth']
+        hcp_base_dir = settings.app['hcp']['base_dir']
+
+        hcp_filename= f'{machine_uuid}_{uuid.uuid4()}.png'
+        upload_url = f'{hcp_server}/rest/{hcp_base_dir}/{hcp_filename}'
+        put_request = urllib.request.Request(
+            upload_url,
+            method='PUT',
+            data=screenshot_data,
+        )
+        put_request.add_header('Content-Length', str(len(screenshot_data)))
+        put_request.add_header('Content-Type', 'multipart/form-data')
+        put_request.add_header('Authorization', hcp_auth)
+        ssl_context = ssl._create_unverified_context()
+        response = urllib.request.urlopen(
+            put_request,
+            context=ssl_context,
+            timeout=settings.app['hcp'].get('timeout', 120)
+        )
+        if response.code != 201:
+            settings.raven.captureMessage(
+                f'problem uploading data to hcp: {hcp_server}, {upload_url} -> {response.code}'
+            )
+        return upload_url.replace('/rest/', '/hs3/')
+
+    def take_screenshot(self, uuid: str, store_to: str='db') -> str:
         """
-        Takes screenshot of VM and returns it as base64 encoded string
+        Takes screenshot of VM and returns it as base64 encoded string or hcp url
         :param uuid: machine uuid
-        :return: base64 encoded string, or None in case of failure
+        :param store_to: screenshot destination, db or hcp for now
+        :return: base64 encoded string, or hcp url or None in case of failure
         """
         datastore, path = self._take_screenshot_to_datastore(uuid=uuid)
-        screenshot_data_b64 = None
         self.__logger.debug(f'datastore: {datastore}, path: {path}')
         if datastore is not None or path is not None:
             screenshot_data = self.get_file_bytes_from_datastore(datastore_name=datastore, remote_path_to_file=path)
             if screenshot_data:
-                screenshot_data_b64 = base64.b64encode(screenshot_data)
+                if store_to == "hcp":
+                    return self._store_screenshot_to_hcp(uuid, screenshot_data)
+                elif store_to == "db":
+                    return base64.b64encode(screenshot_data)
+                else:
+                    settings.raven.captureMessage(f'invalid store_to specification ({store_to})')
             else:
                 settings.raven.captureMessage('Error obtaining screenshot data')
-
-        return screenshot_data_b64
 
     def take_snapshot(self, uuid, snapshot_name) -> bool:
         self.__logger.debug(f'-> take_snapshot({uuid}, {snapshot_name})')
