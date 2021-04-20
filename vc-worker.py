@@ -187,12 +187,21 @@ def enqueue_get_info_request(request, machine, conn):
 
 
 def action_take_screenshot(request, machine, vc, conn):
-    screenshot_data = vc.take_screenshot(machine.provider_id)
+    ss_destination = settings.app['service']['screenshot_store']
+    if ss_destination not in ['db', 'hcp']:
+        logger.warn(f'wrong configuration for screenshot_store: {ss_destination}')
+        ss_destination = 'db'
+
+    screenshot_data = vc.take_screenshot(machine.provider_id, store_to=ss_destination)
     if request.subject_id:
         ss = data.Screenshot.get_one_for_update({'_id': request.subject_id}, conn=conn)
         if screenshot_data:
-            ss.image_base64 = screenshot_data.decode("utf-8")
-            ss.status = "obtained"
+            if ss_destination == 'hcp':
+                ss.image_base64 = screenshot_data
+                ss.status = 'hcpstored'
+            else:
+                ss.image_base64 = screenshot_data.decode("utf-8")
+                ss.status = 'obtained'
         else:
             ss.image_base64 = ""
             ss.status = "error"
