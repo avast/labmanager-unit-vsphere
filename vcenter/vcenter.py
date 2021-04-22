@@ -499,9 +499,13 @@ class VCenter:
             raise Exception(f'machine {uuid} not found')
 
         self.__logger.debug(f'found vm: {vm.config.uuid}')
-        screenshot_task = vm.CreateScreenshot_Task()
-        self.wait_for_task(screenshot_task)
-        result_path = screenshot_task.info.result
+        result_path = None
+        try:
+            screenshot_task = vm.CreateScreenshot_Task()
+            self.wait_for_task(screenshot_task, timeout=88)
+            result_path = screenshot_task.info.result
+        except Exception:
+            result_path = None
         if not result_path:
             return None, None
         # can't we just use self.destination_datastore.info.name ?
@@ -765,11 +769,16 @@ class VCenter:
         finally:
             return result
 
-    def wait_for_task(self, task):
+    def wait_for_task(self, task, timeout=600):
         # this function is as ugly as possible but written in this way for stability purposes.
         # the number of callings to pyvmomi library is restricted as much as possible.
         state = None
+        counter = 0
         while True:
+            counter = counter + 1
+            if counter >= timeout:
+                self.__logger.warn('We are waiting for task more than 10 minutes, aborting...')
+                break
             state = task.info.state
             if state == 'success' or state == 'error':
                 break
@@ -785,9 +794,14 @@ class VCenter:
                 progress,
                 message
             ))
-            time.sleep(0.5)
+            time.sleep(1)
 
-        result = task.info.result
+        result = None
+        try:
+            result = task.info.result
+        except Exception:
+            self.__logger.warn('Problem obtaining a result of this vsphere task')
+
         self.__logger.debug('Task finished with status: {}, return value: {}'.format(
             state,
             result,
