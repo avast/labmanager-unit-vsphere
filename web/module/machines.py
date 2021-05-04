@@ -24,7 +24,11 @@ machines = Blueprint('machines')
 
 async def check_payload_deploy(request):
     if 'json_params' in request.headers and 'labels' in request.headers['json_params']:
-        return True
+        labels = request.headers['json_params']['labels']
+        # test if labels contain "template" label
+        if not bool([l for l in labels if l.startswith('template:')]):
+            raise sanic.exceptions.InvalidUsage(f'Label specification {labels} does not contain \'template\' label.')
+        return
     raise sanic.exceptions.InvalidUsage(
         'malformatted input json data, field labels must be specified'
     )
@@ -55,19 +59,20 @@ please wait till another slot is to be freed'
 async def machine_deploy(request):
     await check_payload_deploy(request)
     logger.debug("POST /machines wanted by: {}".format(request.headers.get("AUTHORISED_LOGIN", "<n/a>")))
+    labels = request.headers['json_params']['labels']
     await check_resources()
     with data.Connection.use() as conn:
         new_request = data.Request(type=data.RequestType.DEPLOY)
         new_request.save(conn=conn)
         if settings.app['service']['personalised']:
             new_machine = data.Machine(
-                labels=request.headers['json_params']['labels'],
+                labels=labels,
                 requests=[new_request.id],
                 owner=request.headers["AUTHORISED_LOGIN"],
             )
         else:
             new_machine = data.Machine(
-                labels=request.headers['json_params']['labels'],
+                labels=labels,
                 requests=[new_request.id]
             )
         new_machine.save(conn=conn)
