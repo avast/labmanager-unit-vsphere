@@ -17,6 +17,7 @@ import tempfile
 import uuid
 import urllib.request
 
+
 class VCenter:
 
     def __init__(self):
@@ -515,7 +516,7 @@ class VCenter:
         hcp_auth = settings.app['hcp']['auth']
         hcp_base_dir = settings.app['hcp']['base_dir']
 
-        hcp_filename= f'{machine_uuid}_{uuid.uuid4()}.png'
+        hcp_filename = f'{machine_uuid}_{uuid.uuid4()}.png'
         upload_url = f'{hcp_server}/rest/{hcp_base_dir}/{hcp_filename}'
         put_request = urllib.request.Request(
             upload_url,
@@ -537,7 +538,7 @@ class VCenter:
             )
         return upload_url.replace('/rest/', '/hs3/')
 
-    def take_screenshot(self, uuid: str, store_to: str='db') -> str:
+    def take_screenshot(self, uuid: str, store_to: str = 'db') -> str:
         """
         Takes screenshot of VM and returns it as base64 encoded string or hcp url
         :param uuid: machine uuid
