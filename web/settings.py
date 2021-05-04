@@ -51,12 +51,12 @@ class Settings:
                     'caching_period': 15,             # in seconds
                     'caching_enabled_threshold': 90,  # in percent
                 },
-                'screenshot_store': 'db', # hcp eventually
+                'screenshot_store': 'db',  # hcp eventually
             },
             'hcp': {
                 'url': None,
                 'auth': None,
-                'base_dir':'ss',
+                'base_dir': 'ss',
                 'timeout': 120,
             },
             'retries': {
