@@ -14,7 +14,7 @@ Contributors outside QA Automation team are required to discuss the contribution
   ```
   psql -U postgres
   ```
-* create new table
+* create new database, sequence, table
   ```
   create database "lm-unit-ok_dev";
             \c "lm-unit-ok_dev";
@@ -32,6 +32,13 @@ Contributors outside QA Automation team are required to discuss the contribution
             );
             ALTER TABLE public.documents OWNER TO postgres;
   ```
+* create new indexes
+  ```
+  CREATE INDEX idx10 ON public.documents USING btree (((data ->> 'type'::text)))
+  CREATE INDEX idx11 ON public.documents USING btree (((data ->> 'lock'::text)))
+  CREATE INDEX idx3 ON public.documents USING btree (type, ((data ->> 'state'::text)))
+  CREATE INDEX idx4 ON public.documents USING btree (type, id)
+  ```
 * copy file `config/lm-unit.yaml.example` to `config/lm-unit.yaml`
 * adjust the contents of `config/lm-unit.yaml`
     * the config already contains some hints
@@ -48,10 +55,16 @@ Contributors outside QA Automation team are required to discuss the contribution
   PIPENV_VENV_IN_PROJECT=1 pipenv install
   ```
 
+
+### Production usage
+* Please repeat the database creation for production use
+* create production section of your config
+* the sevice consists of four microservices that are specified in `Procfile`, so please run all microservices by using e.g. systemd services, docker containers or k8s.
+
 ### Code
 * Python code changes need to follow PEP8, with following mods:
     * indent using 4 spaces only
-    * line length limit extended to 100
+    * line length limit extended to 120
 * new features should be covered via specs
 
 ### Branching
@@ -75,6 +88,4 @@ Contributors outside QA Automation team are required to discuss the contribution
     * branches named `chore_*`, snake case
     * single commit, message starting with `chore: `
 
-## Production use
 
-The service is not production ready yet.
