@@ -152,22 +152,23 @@ class VCenter:
 
     def __find_snapshot_by_name(self, snapshot_list, snapshot_name):
         for item in snapshot_list:
-            if(item.name == snapshot_name):
+            if item.name == snapshot_name:
                 self.__logger.debug('snapshot found: {}'.format(item))
-                return(item.snapshot)
+                return item.snapshot
 
             if item.childSnapshotList != []:
-                return self.__find_snapshot_by_name(item.childSnapshotList, snapshot_name)
+                res_snap = self.__find_snapshot_by_name(item.childSnapshotList, snapshot_name)
+                if res_snap:
+                    return res_snap
+
+        return None
 
     def search_for_snapshot(self, vm, snapshot_name):
-        for item in vm.snapshot.rootSnapshotList:
-            if(item.name == snapshot_name):
-                return(item.snapshot)
+        res_snap = self.__find_snapshot_by_name(vm.snapshot.rootSnapshotList, snapshot_name)
+        if res_snap is None:
+            raise ValueError('snapshot {} cannot be found'.format(snapshot_name))
 
-            if item.childSnapshotList != []:
-                return self.__find_snapshot_by_name(item.childSnapshotList, snapshot_name)
-
-        raise ValueError('snapshot {} cannot be found'.format(snapshot_name))
+        return res_snap
 
     def __determine_root_system_folder(self, dc_folder):
         """
