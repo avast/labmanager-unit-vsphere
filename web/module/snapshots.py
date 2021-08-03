@@ -1,3 +1,5 @@
+import datetime
+
 from sanic import Blueprint
 import web.modeltr as data
 import logging
@@ -18,7 +20,9 @@ async def take_snapshot(request, machine_id):
     with data.Connection.use() as conn:
 
         snapshot_name = request.headers['json_params']['name']
-        new_snapshot = data.Snapshot(machine=machine_id, name=snapshot_name)
+        new_snapshot = data.Snapshot(machine=machine_id,
+                                     name=snapshot_name,
+                                     created_at=datetime.datetime.now())
         new_snapshot.save(conn=conn)
 
         new_request = data.Request(type=data.RequestType.TAKE_SNAPSHOT)

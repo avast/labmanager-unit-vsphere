@@ -1,3 +1,5 @@
+import datetime
+
 from sanic import Blueprint
 import web.modeltr as data
 import logging
@@ -14,7 +16,8 @@ async def take_screenshot(request, machine_id):
     with data.Connection.use() as conn:
         machine = data.Machine.get_one_for_update({'_id': machine_id}, conn=conn)
 
-        new_screenshot = data.Screenshot(machine='{}'.format(machine_id))
+        new_screenshot = data.Screenshot(machine='{}'.format(machine_id),
+                                         created_at=datetime.datetime.now())
         new_screenshot.save(conn=conn)
 
         machine.screenshots.append(new_screenshot.id)
