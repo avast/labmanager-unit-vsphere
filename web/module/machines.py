@@ -15,6 +15,7 @@ import sys
 import threading
 import asyncio
 import logging
+import web.enhanced_logging as el
 
 
 logger = logging.getLogger(__name__)
@@ -56,14 +57,17 @@ please wait till another slot is to be freed'
 
 
 @machines.route('/machines', methods=['POST'])
+@el.log_func_boundaries
 async def machine_deploy(request):
+    el.log_d(request, "POST /machines wanted by: {}".format(request.headers.get("AUTHORISED_LOGIN", "<n/a>")))
     await check_payload_deploy(request)
-    logger.debug("POST /machines wanted by: {}".format(request.headers.get("AUTHORISED_LOGIN", "<n/a>")))
     labels = request.headers['json_params']['labels']
     await check_resources()
+    el.log_d(request, "attempting to create db session")
     with data.Connection.use() as conn:
         new_request = data.Request(type=data.RequestType.DEPLOY)
         new_request.save(conn=conn)
+        el.log_d(request, "new request saved")
         if settings.app['service']['personalised']:
             new_machine = data.Machine(
                 labels=labels,
@@ -76,12 +80,15 @@ async def machine_deploy(request):
                 requests=[new_request.id]
             )
         new_machine.save(conn=conn)
+        el.log_d(request, "new machine saved")
 
         new_request.machine = str(new_machine.id)
         new_request.save(conn=conn)
+        el.log_d(request, "new request saved again")
 
         # begin machine preparation
         data.Action(type='deploy', request=new_request.id).save(conn=conn)
+        el.log_d(request, "new action saved")
 
     return {
             'request_id': '{}'.format(new_request.id),
