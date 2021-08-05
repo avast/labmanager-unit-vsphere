@@ -165,8 +165,9 @@ async def check_machine_owner(machine, request):
 
 
 @machines.route('/machines/<machine_id>', methods=['DELETE'])
-async def machine_get_info(request, machine_id):
-    logger.debug('Current thread name: {}'. format(threading.current_thread().name))
+@el.log_func_boundaries
+async def machine_delete(request, machine_id):
+    el.log_d(request, "DELETE /machines, trying to obtain db session")
 
     with data.Connection.use() as conn:
         asyncio.sleep(0.1)
@@ -174,9 +175,12 @@ async def machine_get_info(request, machine_id):
         await check_machine_owner(machine, request)
         new_request = data.Request(type=data.RequestType.UNDEPLOY, machine=str(machine_id))
         new_request.save(conn=conn)
+        el.log_d(request, "new_request saved")
         machine.requests.append(new_request.id)
         machine.save(conn=conn)
+        el.log_d(request, "machine saved")
         data.Action(type='other', request=new_request.id).save(conn=conn)
+        el.log_d(request, "new_action saved")
 
     return {
             'request_id': '{}'.format(new_request.id),
