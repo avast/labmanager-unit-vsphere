@@ -34,10 +34,10 @@ Contributors outside QA Automation team are required to discuss the contribution
   ```
 * create new indexes
   ```
-  CREATE INDEX idx10 ON public.documents USING btree (((data ->> 'type'::text)))
-  CREATE INDEX idx11 ON public.documents USING btree (((data ->> 'lock'::text)))
-  CREATE INDEX idx3 ON public.documents USING btree (type, ((data ->> 'state'::text)))
-  CREATE INDEX idx4 ON public.documents USING btree (type, id)
+  CREATE INDEX idx10 ON public.documents USING btree (((data ->> 'type'::text)));
+  CREATE INDEX idx11 ON public.documents USING btree (((data ->> 'lock'::text)));
+  CREATE INDEX idx3 ON public.documents USING btree (type, ((data ->> 'state'::text)));
+  CREATE INDEX idx4 ON public.documents USING btree (type, id);
   ```
 * copy file `config/lm-unit.yaml.example` to `config/lm-unit.yaml`
 * adjust the contents of `config/lm-unit.yaml`
