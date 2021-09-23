@@ -11,6 +11,7 @@ import sys
 import threading
 import asyncio
 import logging
+from web.module.capabilities import Capabilities as cap
 
 logger = logging.getLogger(__name__)
 
@@ -43,6 +44,23 @@ async def req_get_info(request, req_id):
                 'result': result_dict,
                 'is_last': req.state.has_finished()
             }]
+
+        if req.type is data.RequestType.DEPLOY:
+            await cap.fetch(forced=True)
+            extra_result = [{
+                               'result': {
+                                   'machine_id': req.machine,
+                                   'capabilities': {
+                                       'slot_limit': cap.get_slot_limit(),
+                                       'free_slots': cap.get_free_slots(),
+                                       'labels': cap.get_labels(),
+                                   },
+                               },
+                               'is_last': False,
+                               'type': 'return_value',
+            }]
+            result = extra_result + result
+
         if req.state.is_error():
             result[0]['is_last'] = False
             result.append({
