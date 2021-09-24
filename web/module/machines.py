@@ -24,15 +24,22 @@ machines = Blueprint('machines')
 
 
 async def check_payload_deploy(request):
-    if 'json_params' in request.headers and 'labels' in request.headers['json_params']:
-        labels = request.headers['json_params']['labels']
-        # test if labels contain "template" label
-        if not bool([l for l in labels if l.startswith('template:')]):
-            raise sanic.exceptions.InvalidUsage(f'Label specification {labels} does not contain \'template\' label.')
-        return
-    raise sanic.exceptions.InvalidUsage(
-        'malformatted input json data, field labels must be specified'
-    )
+    # tests if 'json_params' are in headers and contains 'labels'
+    if 'json_params' not in request.headers or 'labels' not in request.headers['json_params']:
+        raise sanic.exceptions.InvalidUsage('malformed input json data, \'labels\' must be specified')
+
+    labels = request.headers['json_params']['labels']
+    template_labels_list = [label for label in labels if label.startswith('template:')]
+
+    # test if labels contain 'template' label(s)
+    if not template_labels_list:
+        raise sanic.exceptions.InvalidUsage(f'label specification {labels} does not contain \'template\' label')
+
+    # test if template is supported by unit
+    supported_labels = settings.app['labels']
+    for template_label in template_labels_list:
+        if template_label not in supported_labels:
+            raise sanic.exceptions.InvalidUsage(f'\'{template_label}\' label is not supported by this unit')
 
 
 @machines.middleware('request')
