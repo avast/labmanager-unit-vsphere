@@ -26,6 +26,7 @@ class Machine(Document):
                     'state': MachineState.CREATED,
                     'unit': settings.app['unit_name'],
                     'labels': [],
+                    'created_at': '',
                     'ip_addresses': [],
                     'nos_id': '',
                     'machine_name': '',
