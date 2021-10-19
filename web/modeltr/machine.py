@@ -26,7 +26,7 @@ class Machine(Document):
                     'state': MachineState.CREATED,
                     'unit': settings.app['unit_name'],
                     'labels': [],
-                    'created_at': '',
+                    'created_at': trTimestamp.NOT_INITIALIZED,
                     'ip_addresses': [],
                     'nos_id': '',
                     'machine_name': '',

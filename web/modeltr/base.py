@@ -54,6 +54,7 @@ class trSaveTimestamp(object):
 class trTimestamp(object):
     _default = datetime.datetime.now()
     _type = type(_default)
+    NOT_INITIALIZED = datetime.datetime.min
 
 # ------------- enums ---------------
 
