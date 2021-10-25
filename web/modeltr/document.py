@@ -180,13 +180,14 @@ class Document(object):
         record_data = record[2]
         new_document = cls(id=str(record_id))
         for prop, val in record_data.items():
-            target_type = new_document.__types[prop]
-
             # every field that is stored in the db and is not defined in model will be inaccessible
             if prop not in new_document.__types:
                 continue
+
+            target_type = new_document.__types[prop]
+
             # convert str to datetime.datetime instance
-            elif target_type == datetime.datetime:
+            if target_type == datetime.datetime:
                 setattr(
                         new_document,
                         prop,
