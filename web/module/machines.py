@@ -1,3 +1,5 @@
+import datetime
+
 from web.settings import Settings as settings
 from sanic.response import json as sjson
 import sanic.response
@@ -80,11 +82,13 @@ async def machine_deploy(request):
                 labels=labels,
                 requests=[new_request.id],
                 owner=request.headers["AUTHORISED_LOGIN"],
+                created_at=datetime.datetime.now()
             )
         else:
             new_machine = data.Machine(
                 labels=labels,
-                requests=[new_request.id]
+                requests=[new_request.id],
+                created_at=datetime.datetime.now()
             )
         new_machine.save(conn=conn)
         el.log_d(request, "new machine saved")
