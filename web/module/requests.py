@@ -12,6 +12,7 @@ import threading
 import asyncio
 import logging
 from web.module.capabilities import Capabilities as cap
+from web.settings import Settings as settings
 
 logger = logging.getLogger(__name__)
 
@@ -62,9 +63,11 @@ async def req_get_info(request, req_id):
             result = extra_result + result
 
         if req.state.is_error():
+            unit_name = settings.app.get('unit_name', 'N/A')
+            deploy_error_msg = 'deploy of machine \'{}\' on unit \'{}\' failed'.format(req.machine, unit_name)
             result[0]['is_last'] = False
             result.append({
-                'exception': 'request failed',
+                'exception': deploy_error_msg if req.type is data.RequestType.DEPLOY else 'request failed',
                 'exception_args': [],
                 'exception_traceback': [],
                 'is_last': True
