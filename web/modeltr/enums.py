@@ -48,6 +48,7 @@ class RequestType(StrEnumBase):
     UNDEPLOY = 'undeploy'
     START = 'start'
     STOP = 'stop'
+    RESET = 'reset'
     GET_INFO = 'get_info'
     TAKE_SCREENSHOT = 'take_screenshot'
     TAKE_SNAPSHOT = 'take_snapshot'

@@ -139,6 +139,10 @@ def action_stop(request, machine, vc):
     vc.stop(machine.provider_id)
     return MachineState.STOPPED
 
+def action_reset(request, machine, vc):
+    vc.reset(machine.provider_id)
+    return None
+
 
 def action_get_info(request, machine_ro, vc, action, conn):
     logger.debug(request.to_dict())
@@ -294,6 +298,8 @@ def process_other_actions(conn, action, vc):
             new_machine_state = action_start(request, machine_ro, vc)
         elif request_type is RequestType.STOP:
             new_machine_state = action_stop(request, machine_ro, vc)
+        elif request_type is RequestType.RESET:
+            new_machine_state = action_reset(request, machine_ro, vc)
         elif request_type is RequestType.GET_INFO:
             action_get_info(request, machine_ro, vc, action, conn)
             return
