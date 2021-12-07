@@ -59,6 +59,16 @@ with description('Document'):
         with it('raises exception when no lock specified'):
             expect(lambda: Document.get_eldest_excl('foo')).to(raise_error(ValueError))
 
+    with context('class->_db_record_to_instance_pq()'):
+
+        with it('processes wrongly specified timestamp'):
+            class Ibat(Document):
+                foobar = tr_types.trTimestamp
+            ibat = Ibat()
+            expect(lambda: ibat._db_record_to_instance_pq(
+                ["666", "", {'foobar': '1-0-1 0:0:0'}]
+            )).not_to(raise_error(Exception))
+
     with context('class->get()'):
 
         with it('raises an exception when no connection is provided'):
