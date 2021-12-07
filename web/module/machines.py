@@ -37,6 +37,10 @@ async def check_payload_deploy(request):
     if not template_labels_list:
         raise sanic.exceptions.InvalidUsage(f'label specification {labels} does not contain \'template\' label')
 
+    # test if labels contain only one 'template' label
+    if len(template_labels_list) > 1:
+        raise sanic.exceptions.InvalidUsage(f'label specification {labels} contains multiple \'template\' labels')
+
     # test if template is supported by unit
     supported_labels = settings.app['labels']
     for template_label in template_labels_list:
