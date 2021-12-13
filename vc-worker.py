@@ -298,7 +298,7 @@ def process_other_actions(conn, action, vc):
             new_machine_state = action_start(request, machine_ro, vc)
         elif request_type is RequestType.STOP:
             new_machine_state = action_stop(request, machine_ro, vc)
-        elif request_type is RequestType.RESET:
+        elif request_type is RequestType.RESTART:
             new_machine_state = action_reset(request, machine_ro, vc)
         elif request_type is RequestType.GET_INFO:
             action_get_info(request, machine_ro, vc, action, conn)

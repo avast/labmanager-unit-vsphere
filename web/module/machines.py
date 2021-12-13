@@ -204,7 +204,7 @@ async def machine_do_start_stop_reset(request, machine_id):
     logger.debug('Current thread name: {}'. format(threading.current_thread().name))
 
     action = request.headers.get('json_params').get('action')
-    if action not in ['start', 'stop', 'reset']:
+    if action not in ['start', 'stop', 'restart']:
         raise sanic.exceptions.InvalidUsage('malformatted input json data, invalid or none \'action\' specified')
 
     request_type = data.RequestType(action)
@@ -214,7 +214,7 @@ async def machine_do_start_stop_reset(request, machine_id):
         await asyncio.sleep(0.1)
         machine = data.Machine.get_one_for_update({'_id': machine_id}, conn=conn)
         # reset can be invoked only on running machine
-        if request_type is data.RequestType.RESET and machine.state is not data.MachineState.RUNNING:
+        if request_type is data.RequestType.RESTART and machine.state is not data.MachineState.RUNNING:
             raise sanic.exceptions.InvalidUsage('Machine must be in state \'{}\' to invoke \'reset\', '
                                                 'but was in state \'{}\'!'
                                                 .format(data.MachineState.RUNNING, machine.state))
