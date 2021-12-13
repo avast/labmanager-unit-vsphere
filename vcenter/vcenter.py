@@ -487,6 +487,18 @@ class VCenter:
                 settings.raven.captureException(exc_info=True)
                 self.__sleep_between_tries()
 
+    def reset(self, uuid):
+        self.__check_connection()
+        vm = self.content.searchIndex.FindByUuid(None, uuid, True)
+        if not vm:
+            raise Exception('machine {} not found'.format(uuid))
+        self.__logger.debug('found vm: {}'.format(vm.config.uuid))
+        # invoke reset - it does not fail even in case VM is powered off!
+        task = vm.ResetVM_Task()
+        self.wait_for_task(task)
+        self.__logger.debug('vm reset done')
+
+
     def _take_screenshot_to_datastore(self, uuid):
         """
         Takes screenshot of VM and saves it in datastore

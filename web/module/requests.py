@@ -24,7 +24,7 @@ async def req_get_info(request, req_id):
     # logger.debug('Current thread name: {}'. format(threading.current_thread().name))
 
     with data.Connection.use() as conn:
-        asyncio.sleep(0.1)
+        await asyncio.sleep(0.1)
         req = data.Request.get({'_id': req_id}, conn=conn).first()
         result_dict = {
                     'machine_id': req.machine,

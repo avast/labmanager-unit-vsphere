@@ -138,7 +138,7 @@ async def machines_get_info(request):
             )
 
     with data.Connection.use() as conn:
-        asyncio.sleep(0.1)
+        await asyncio.sleep(0.1)
         machines = await get_machines(request, conn)
         output = []
         for machine in machines:
@@ -157,7 +157,7 @@ async def machines_get_info(request):
 async def machine_get_info(request, machine_id):
     logger.debug('Current thread name: {}'. format(threading.current_thread().name))
     with data.Connection.use() as conn:
-        asyncio.sleep(0.1)
+        await asyncio.sleep(0.1)
         try:
             req = (await get_machines(request, conn, flt={'_id': machine_id})).first()
             result = req.to_dict(show_hidden=await show_hidden_strings(request))
@@ -185,7 +185,7 @@ async def machine_delete(request, machine_id):
     el.log_d(request, "DELETE /machines, trying to obtain db session")
 
     with data.Connection.use() as conn:
-        asyncio.sleep(0.1)
+        await asyncio.sleep(0.1)
         machine = data.Machine.get_one_for_update({'_id': machine_id}, conn=conn)
         await check_machine_owner(machine, request)
         new_request = data.Request(type=data.RequestType.UNDEPLOY, machine=str(machine_id))
@@ -204,19 +204,25 @@ async def machine_delete(request, machine_id):
 
 
 @machines.route('/machines/<machine_id>', methods=['PUT'])
-async def machine_do_start_stop(request, machine_id):
+async def machine_do_start_stop_reset(request, machine_id):
     logger.debug('Current thread name: {}'. format(threading.current_thread().name))
 
     action = request.headers.get('json_params').get('action')
-    if action not in ['start', 'stop']:
+    if action not in ['start', 'stop', 'restart']:
         raise sanic.exceptions.InvalidUsage('malformatted input json data, invalid or none \'action\' specified')
 
     request_type = data.RequestType(action)
 
-    # do start / stop
+    # do start / stop / reset
     with data.Connection.use() as conn:
-        asyncio.sleep(0.1)
+        await asyncio.sleep(0.1)
         machine = data.Machine.get_one_for_update({'_id': machine_id}, conn=conn)
+        # reset can be invoked only on running machine
+        if request_type is data.RequestType.RESTART and machine.state is not data.MachineState.RUNNING:
+            raise sanic.exceptions.InvalidUsage('Machine must be in state \'{}\' to invoke \'reset\', '
+                                                'but was in state \'{}\'!'
+                                                .format(data.MachineState.RUNNING, machine.state))
+
         await check_machine_owner(machine, request)
         new_request = data.Request(type=request_type, machine=str(machine_id))
         new_request.save(conn=conn)
