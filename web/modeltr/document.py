@@ -188,10 +188,14 @@ class Document(object):
 
             # convert str to datetime.datetime instance
             if target_type == datetime.datetime:
+                try:
+                    cv = datetime.datetime.strptime(val, cls.__datetime_format)
+                except ValueError as ex:
+                    cv = datetime.datetime.min
                 setattr(
                         new_document,
                         prop,
-                        datetime.datetime.strptime(val, cls.__datetime_format)
+                        cv
                 )
             # convert strEnums back to instances
             elif issubclass(target_type, StrEnumBase):
