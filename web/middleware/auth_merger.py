@@ -1,6 +1,4 @@
 import logging
-import sys
-import datetime
 
 logger = logging.getLogger()
 

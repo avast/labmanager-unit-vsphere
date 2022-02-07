@@ -1,17 +1,12 @@
 import logging
-import sys
-import datetime
 import json
 from sanic.exceptions import abort
-import sanic.exceptions
 
 logger = logging.getLogger()
 
 
 async def json_params(request):
-    # logger.debug(request.headers)
-    # logger.debug(request.body)
-    if (request.headers.get('content-type', None) == 'application/json'):
+    if request.headers.get('content-type', None) == 'application/json':
         if len(request.body) == 0:
             request.headers['json_params'] = {}
             return
