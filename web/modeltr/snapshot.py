@@ -1,8 +1,5 @@
-import web.settings
-import datetime
-from .base import trString, trList, trId, trSaveTimestamp, trTimestamp
+from .base import trString, trTimestamp
 from .document import *
-import logging
 
 
 class Snapshot(Document):

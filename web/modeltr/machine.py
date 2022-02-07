@@ -1,6 +1,6 @@
-from web.settings import Settings as settings
+from web.settings import Settings
 
-from .base import trString, trList, trId, trSaveTimestamp, trMachineState, trTimestamp, trHiddenString
+from .base import trString, trList, trSaveTimestamp, trMachineState, trTimestamp, trHiddenString
 from .enums import MachineState
 from .document import *
 
@@ -24,7 +24,7 @@ class Machine(Document):
 
     _defaults = {
                     'state': MachineState.CREATED,
-                    'unit': settings.app['unit_name'],
+                    'unit': Settings.app['unit_name'],
                     'labels': [],
                     'created_at': trTimestamp.NOT_INITIALIZED,
                     'ip_addresses': [],
