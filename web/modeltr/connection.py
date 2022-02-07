@@ -1,6 +1,5 @@
-from contextlib import contextmanager
 import psycopg2
-from web.settings import Settings as settings
+from web.settings import Settings
 import logging
 import select
 
@@ -28,12 +27,12 @@ class Connection(object):
             else:
                 self.client.rollback()
 
-            self.__logger.warn('Exception occurred when working with Connection, rolled back')
+            self.__logger.warning('Exception occurred when working with Connection, rolled back')
 
     def __init__(self, **kwargs):
         self.__logger = logging.getLogger(__name__)
         self.async_mode = False
-        for i in range(settings.app['retries']['db_connection']):
+        for i in range(Settings.app['retries']['db_connection']):
             try:
                 self.async_mode = True if 'async_mode' in kwargs else False
                 self.client = psycopg2.connect(kwargs['dsn'], async_=self.async_mode)
@@ -41,8 +40,8 @@ class Connection(object):
                     Connection.__wait_for_completion(self.client)
                     self.acursor = self.client.cursor()
                 break
-            except psycopg2.OperationalError as e:
-                self.__logger.warn('Error connecting to the db server', exc_info=True)
+            except psycopg2.OperationalError:
+                self.__logger.warning('Error connecting to the db server', exc_info=True)
 
     def get_cursor(self):
         return self.acursor if self.async_mode else self.client.cursor()
@@ -70,20 +69,14 @@ class Connection(object):
             elif state == psycopg2.extensions.POLL_READ:
                 select.select([client.fileno()], [], [])
             else:
-                raise psycopg2.OperationalError(
-                    "__wait_for_completion->poll() returned {}".format(state)
-                )
+                raise psycopg2.OperationalError(f'__wait_for_completion->poll() returned {state}')
 
     @classmethod
     def use(cls, alias=DEFAULT_CONNECTION_NAME):
         if alias not in cls.__connections:
-            raise ValueError(
-                'connection {} has not been initialized before, please use connect method'.format(
-                    alias
-                )
-            )
+            raise ValueError(f'connection {alias} has not been initialized before, please use connect method')
+
         connection = cls.__connections[alias]
-        logger = logging.getLogger(__name__)
         try:
             connection["connection"].client.reset()
         except (psycopg2.InterfaceError, psycopg2.OperationalError, psycopg2.DatabaseError) as e:
