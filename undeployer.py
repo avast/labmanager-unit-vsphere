@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 
-from datetime import datetime
-import os
-import yaml
 import logging
+import os
 import time
+from datetime import datetime
+
 import requests
-import json
+import yaml
 
 logging.basicConfig(
     level='INFO',
@@ -22,7 +22,7 @@ def load_config(config_file, env):
 
 def check_request_type(endpoint, headers, request_id, request_type):
     response = requests.get(
-        '{}requests/{}'.format(endpoint, request_id),
+        f'{endpoint}requests/{request_id}',
         headers=headers
     )
     if response.status_code == 200:
@@ -31,9 +31,8 @@ def check_request_type(endpoint, headers, request_id, request_type):
 
 
 def undeploy_machine(endpoint, headers, machine_id):
-    # return
     response = requests.delete(
-        '{}machines/{}'.format(endpoint, machine_id),
+        f'{endpoint}machines/{machine_id}',
         headers=headers
     )
     return response.status_code == 200
@@ -47,20 +46,12 @@ def check_and_undeploy(
                         interval_to_live,
                         last_request_type
 ):
-    # logger.debug('{}: {} -> {}'.format(endpoint_name, endpoint, headers))
-    unit_state_name = '{}[{}]'.format(endpoint_name, state)
-    logger.info('{}: examining state: {}, ensure to live for {} secs.'.format(
-        unit_state_name,
-        state,
-        interval_to_live
-    ))
+    unit_state_name = f'{endpoint_name}[{state}]'
+    logger.info(f'{unit_state_name}: examining state: {state}, ensure to live for {interval_to_live} secs.')
     try:
-        response = requests.get('{}machines?state={}'.format(endpoint, state), headers=headers)
-    except Exception as exc:
-        logger.warning('{}: error communicating with endpoint: {}\nSKIPPED!!'.format(
-            unit_state_name,
-            endpoint
-        ))
+        response = requests.get(f'{endpoint}machines?state={state}', headers=headers)
+    except Exception:
+        logger.warning(f'{unit_state_name}: error communicating with endpoint: {endpoint}\nSKIPPED!!')
         return
 
     num_machines = 0
@@ -73,82 +64,47 @@ def check_and_undeploy(
             last_request_id = machine["requests"][-1]
             datetime_obj = datetime.strptime(machine["modified_at"], '%Y-%m-%d %H:%M:%S')
             seconds_alive = (datetime.now()-datetime_obj).total_seconds()
-            if check_request_type(endpoint, headers, last_request_id, last_request_type) and \
-               seconds_alive > interval_to_live:
-                logger.info('{}: machine: {} is to be undeployed ({:.2f} hours) {}'.format(
-                    unit_state_name,
-                    machine_name,
-                    seconds_alive/60/60,
-                    machine["modified_at"]
-                ))
+            is_request_type_ok = check_request_type(endpoint, headers, last_request_id, last_request_type)
+            hours = seconds_alive / 60 / 60
+            ts = machine["modified_at"]
+            if is_request_type_ok and seconds_alive > interval_to_live:
+                logger.info(f'{unit_state_name}: machine: {machine_name} is to be undeployed ({hours:.2f} hours) {ts}')
                 undeploy_machine(endpoint, headers, machine_id)
                 num_undeployed += 1
             else:
-                logger.info('{}: machine: {} is to be kept ({:.2f} hours) {}'.format(
-                    unit_state_name,
-                    machine_name,
-                    seconds_alive/60/60,
-                    machine["modified_at"]
-                ))
+                logger.info(f'{unit_state_name}: machine: {machine_name} is to be kept ({hours:.2f} hours) {ts}')
     else:
-        logger.error('{}: error getting machines in state: {} with statuscode: {}'.format(
-            unit_state_name,
-            state,
-            response.status_code
-        ))
-    logger.info('{}: {} in the state: {}, {} undeployed'.format(
-        unit_state_name,
-        num_machines,
-        state,
-        num_undeployed
-    ))
+        logger.error(f'{unit_state_name}: error getting machines in state: {state}, response: {response.status_code}')
+
+    logger.info(f'{unit_state_name}: {num_machines} in the state: {state}, {num_undeployed} undeployed')
 
 
-def ensure_capacity(
-                        endpoint_name,
-                        endpoint,
-                        headers,
-                        required_free_capacity_percentage
-):
-    unit_state_name = '{}[ensure {}%]'.format(endpoint_name, required_free_capacity_percentage)
-    logger.info('{}: ensuring capacity: {} percent'.format(
-        unit_state_name,
-        required_free_capacity_percentage
-    ))
-    response = requests.get(
-        '{}capabilities'.format(endpoint),
-        headers=headers
-    )
+def ensure_capacity(endpoint_name, endpoint, headers, required_free_capacity_percentage):
+
+    unit_state_name = f'{endpoint_name}[ensure {required_free_capacity_percentage}%]'
+    logger.info(f'{unit_state_name}: ensuring capacity: {required_free_capacity_percentage} percent')
+    response = requests.get(f'{endpoint}capabilities', headers=headers)
     if response.status_code != 200:
-        logger.warning(
-            "cannot get capabilities of cluster {}, stats not available ({})!".format(
-                unit_state_name,
-                response.status_code
-            )
-        )
+        logger.warning(f"cannot get capabilities of {unit_state_name}, stats not available ({response.status_code})!")
         return
 
     out_json = response.json()
     slots_max = out_json['responses'][0]['result']['slot_limit']
     slots_free = out_json['responses'][0]['result']['free_slots']
     free_slots_required = int(slots_max * required_free_capacity_percentage/100)
-    logger.info("{}: {} free, {} required to be free".format(
-        unit_state_name,
-        slots_free,
-        free_slots_required
-    ))
+    logger.info(f"{unit_state_name}: {slots_free} free, {free_slots_required} required to be free")
 
     if slots_free > free_slots_required:
         logger.info("-> machine removal not needed, there is enough free slots.")
         return
 
     to_be_removed = free_slots_required - slots_free
-    logger.info("-> machine removal NEEDED, {} machine(s) should be removed.".format(to_be_removed))
+    logger.info(f"-> machine removal NEEDED, {to_be_removed} machine(s) should be removed.")
 
     machine_seconds = dict()
     state = "stopped"
     try:
-        response = requests.get('{}machines?state={}'.format(endpoint, state), headers=headers)
+        response = requests.get(f'{endpoint}machines?state={state}', headers=headers)
         if response.status_code == 200:
             all_response_machines = response.json()["responses"][0]["result"]
             for machine in all_response_machines:
@@ -156,24 +112,18 @@ def ensure_capacity(
                 datetime_obj = datetime.strptime(machine["modified_at"], '%Y-%m-%d %H:%M:%S')
                 seconds_alive = (datetime.now()-datetime_obj).total_seconds()
                 machine_seconds[machine_id] = seconds_alive
-    except Exception as ex:
+    except Exception:
         logger.error('-> error obtaining machines to be undeployed')
 
     machine_seconds_sorted = sorted(machine_seconds.items(), key=lambda kv: kv[1], reverse=True)
     machine_ids_to_be_deleted = machine_seconds_sorted[0:to_be_removed] \
         if len(machine_seconds_sorted) > to_be_removed else machine_seconds_sorted
-    logger.info("-> machine removal NEEDED, {} machine(s) will be removed.".format(len(machine_ids_to_be_deleted)))
+    logger.info(f"-> machine removal NEEDED, {len(machine_ids_to_be_deleted)} machine(s) will be removed.")
     for machine in machine_ids_to_be_deleted:
-        logger.info("-> deleting machine with id {}".format(machine[0]))
-        del_response = requests.delete('{}machines/{}'.format(
-            endpoint,
-            machine[0]),
-            headers=headers
-        )
-
-        logger.info("-> deleting machine {}".format(
-            "SUCCEEDED" if del_response.status_code == 200 else "FAILED"
-        ))
+        logger.info(f"-> deleting machine with id {machine[0]}")
+        del_response = requests.delete(f'{endpoint}machines/{machine[0]}', headers=headers)
+        res_str = 'SUCCEEDED' if del_response.status_code == 200 else 'FAILED'
+        logger.info(f"-> deleting machine {res_str}")
 
 
 def get_custom_config(where, what, default):
@@ -188,7 +138,7 @@ if __name__ == '__main__':
     config_file = os.getenv('CONFIG', './undeployer.yaml')
     env = os.getenv('ENV', 'production')
     config = {}
-    logger = logging.getLogger('idle_undeployer_{}'.format(env))
+    logger = logging.getLogger(f'idle_undeployer_{env}')
 
     while True:
         config = load_config(config_file, env)
@@ -216,11 +166,7 @@ if __name__ == '__main__':
                     config['endpoints'][cluster_name],
                     config['headers'],
                     state,
-                    get_custom_config(
-                        config.get('interval_{}'.format(cluster_name)),
-                        '{}_duration'.format(state),
-                        data['duration']
-                    ),
+                    get_custom_config(config.get(f'interval_{cluster_name}'), f'{state}_duration', data['duration']),
                     data['last_action_type']
                 )
 
