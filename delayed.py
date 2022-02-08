@@ -1,32 +1,26 @@
 #!/usr/bin/env python3
 
-from web.settings import Settings as settings
-from web.modeltr.enums import RequestState
-import logging
 import datetime
-import threading
-import re
-import time
-import os
-import sys
-import web.modeltr as data
+import logging
 import signal
+import time
+
+import web.modeltr as data
+from web.modeltr.enums import RequestState
+from web.settings import Settings
 
 logger = logging.getLogger(__name__)
 
 
 def signal_handler(signum, frame):
     global process_actions
-    logger.info('worker aborted by signal: {}'.format(signum))
+    logger.info(f'worker aborted by signal: {signum}')
     process_actions = False
 
 
 if __name__ == '__main__':
 
-    data.Connection.connect(
-                            'conn2',
-                            dsn=settings.app['db']['dsn']
-    )
+    data.Connection.connect('conn2', dsn=Settings.app['db']['dsn'])
 
     signal.signal(signal.SIGTERM, signal_handler)
     signal.signal(signal.SIGINT, signal_handler)
@@ -41,7 +35,7 @@ if __name__ == '__main__':
 
                 if action and action.next_try < now:
                     if action.repetitions == 0:
-                        logger.info('action {} timeouted'.format(action.id))
+                        logger.info(f'action {action.id} timeouted')
                         request = data.Request.get_one_for_update(
                                                                     {'_id': action.request},
                                                                     conn=conn
@@ -51,7 +45,7 @@ if __name__ == '__main__':
                         action.lock = -1
                         action.save(conn=conn)
                     else:
-                        logger.debug('firing action: {}'.format(action.id))
+                        logger.debug(f'firing action: {action.id}')
                         logger.debug(action.to_dict())
                         action.lock = 0
                         action.next_try = datetime.datetime(
@@ -63,7 +57,7 @@ if __name__ == '__main__':
                         logger.debug('firing done: {}'.format(action.id))
 
             except Exception:
-                settings.raven.captureException(exc_info=True)
+                Settings.raven.captureException(exc_info=True)
                 logger.error('Exception while processing request: ', exc_info=True)
 
     logger.debug("Delayed finished")
