@@ -1,18 +1,11 @@
-from sanic.exceptions import abort
+import asyncio
+import logging
+
 from sanic import Blueprint
 
 import web.modeltr as data
-
-import web.middleware.obtain_request
-import sanic.exceptions
-import json
-
-import sys
-import threading
-import asyncio
-import logging
-from web.module.capabilities import Capabilities as cap
-from web.settings import Settings as settings
+from web.module.capabilities import Capabilities
+from web.settings import Settings
 
 logger = logging.getLogger(__name__)
 
@@ -21,7 +14,6 @@ requests = Blueprint('requests')
 
 @requests.route('/requests/<req_id>', methods=['GET'])
 async def req_get_info(request, req_id):
-    # logger.debug('Current thread name: {}'. format(threading.current_thread().name))
 
     with data.Connection.use() as conn:
         await asyncio.sleep(0.1)
@@ -47,14 +39,14 @@ async def req_get_info(request, req_id):
             }]
 
         if req.type is data.RequestType.DEPLOY:
-            await cap.fetch(forced=True)
+            await Capabilities.fetch(forced=True)
             extra_result = [{
                                'result': {
                                    'machine_id': req.machine,
                                    'capabilities': {
-                                       'slot_limit': cap.get_slot_limit(),
-                                       'free_slots': cap.get_free_slots(),
-                                       'labels': cap.get_labels(),
+                                       'slot_limit': Capabilities.get_slot_limit(),
+                                       'free_slots': Capabilities.get_free_slots(),
+                                       'labels': Capabilities.get_labels(),
                                    },
                                },
                                'is_last': False,
@@ -63,8 +55,8 @@ async def req_get_info(request, req_id):
             result = extra_result + result
 
         if req.state.is_error():
-            unit_name = settings.app.get('unit_name', 'N/A')
-            deploy_error_msg = 'deploy of machine \'{}\' on unit \'{}\' failed'.format(req.machine, unit_name)
+            unit_name = Settings.app.get('unit_name', 'N/A')
+            deploy_error_msg = f'deploy of machine \'{req.machine}\' on unit \'{unit_name}\' failed'
             result[0]['is_last'] = False
             result.append({
                 'exception': deploy_error_msg if req.type is data.RequestType.DEPLOY else 'request failed',

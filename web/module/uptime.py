@@ -1,5 +1,6 @@
-from sanic import Blueprint
 import datetime
+
+from sanic import Blueprint
 
 uptime = Blueprint('uptime')
 
