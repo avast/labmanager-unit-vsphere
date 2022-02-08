@@ -1,20 +1,21 @@
-from web.settings import Settings as settings
+import logging
+
 from sanic import Sanic
 from sanic import response
 from sanic.handlers import ErrorHandler
-import logging
-import web.module.machines
-import web.module.requests
-import web.module.capabilities
-import web.module.snapshots
-import web.module.screenshots
-import web.module.uptime
 
 import web.middleware.auth
 import web.middleware.auth_ldap
 import web.middleware.auth_merger
 import web.middleware.json_params
 import web.middleware.json_response
+import web.module.capabilities
+import web.module.machines
+import web.module.requests
+import web.module.screenshots
+import web.module.snapshots
+import web.module.uptime
+from web.settings import Settings as settings
 
 logger = logging.getLogger()
 
@@ -38,10 +39,9 @@ class LMUErrorHandler(ErrorHandler):
         )
 
 
-# lm_unit_webserver = Sanic(__name__, error_handler=LMUErrorHandler())
 lm_unit_webserver = Sanic(__name__)
 
-if (settings.app['service'].get("auth_module", "<none>") == 'ldap_auth'):
+if settings.app['service'].get("auth_module", "<none>") == 'ldap_auth':
     logger.debug("Registering ldap_auth....")
     lm_unit_webserver.register_middleware(web.middleware.auth_ldap.auth, 'request')
     logger.debug("Registered ldap_auth sucessfully")

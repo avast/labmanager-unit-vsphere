@@ -1,9 +1,10 @@
 import logging
+import os
 from collections import Iterable
+
+import raven
 import yaml
 from deepmerge import Merger as dm
-import os
-import raven
 
 
 class Settings:
@@ -84,6 +85,7 @@ class Settings:
 
     raven = None
 
+    @staticmethod
     def __flatten(items):
         """Yield items from any nested iterable; see Reference."""
         for item in items:
@@ -93,6 +95,7 @@ class Settings:
             else:
                 yield item
 
+    @staticmethod
     def configure():
         config_file_section = Settings.__config[Settings.environ]
         config_file_section['labels'] = \
