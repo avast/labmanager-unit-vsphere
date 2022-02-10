@@ -1,21 +1,18 @@
 #!/usr/bin/env python3
 
-from web.settings import Settings as settings
-import logging
-
 import datetime
-import random
-
-import threading
-import re
-import time
+import logging
 import os
-import sys
-import web.modeltr as data
-import vcenter.vcenter as vcenter
+import random
+import re
 import signal
+import sys
+import time
 
+import vcenter.vcenter as vcenter
+import web.modeltr as data
 from web.modeltr.enums import MachineState, RequestState, RequestType
+from web.settings import Settings
 
 logger = logging.getLogger(__name__)
 
@@ -23,7 +20,7 @@ logger = logging.getLogger(__name__)
 def get_template(labels):
     for l in labels:
         matches = re.match('template:(.*)', l)
-        if (matches):
+        if matches:
             return matches[1]
     raise ValueError('cannot get template name from labels')
 
@@ -49,49 +46,35 @@ def process_deploy_action(conn, action, vc):
     try:
         request = data.Request.get_one_for_update({'_id': action.request}, conn=conn)
         machine_ro = data.Machine.get_one({'_id': request.machine}, conn=conn)
-        logger.info('{}-{}->deploy|machine.state: {}'.format(
-                                                                os.getpid(),
-                                                                action.id,
-                                                                machine_ro.state
-        )
-        )
+        logger.info(f'{os.getpid()}-{action.id}->deploy|machine.state: {machine_ro.state}')
 
         template = get_template(machine_ro.labels)
 
-        if settings.app['vsphere']['default_network_name']:
-            network_interface = settings.app['vsphere']['default_network_name']
+        if Settings.app['vsphere']['default_network_name']:
+            network_interface = Settings.app['vsphere']['default_network_name']
         else:
             network_interface = get_network_interface(machine_ro.labels)
 
         inventory_folder = get_inventory_folder(machine_ro.labels)
         machine_info = {'nos_id': ''}
-        if settings.app['unit_name']:
-            output_machine_name = '{}-{}-{}'.format(
-                template,
-                settings.app['unit_name'],
-                request.machine
-            )
+        if Settings.app['unit_name']:
+            output_machine_name = f'{template}-{Settings.app["unit_name"]}-{request.machine}'
         else:
-            output_machine_name = '{}-{}'.format(template, request.machine)
+            output_machine_name = f'{template}-{request.machine}'
 
         try:
-            uuid = vc.deploy(
-                                template,
-                                output_machine_name,
-                                inventory_folder=inventory_folder
-                            )
+            uuid = vc.deploy(template, output_machine_name, inventory_folder=inventory_folder)
             if network_interface:
                 vc.config_network(uuid, interface_name=network_interface)
             machine_info = vc.get_machine_info(uuid)
         except Exception as e:
-            settings.raven.captureException(exc_info=True)
+            Settings.raven.captureException(exc_info=True)
             logger.info('Exception deploying machine: ', exc_info=True)
             raise e
-        if machine_info['nos_id'] == '' or machine_info['nos_id'] is None:
+        if not machine_info['nos_id']:
             vc.stop(uuid)
             vc.undeploy(uuid)
-            raise "NOS id hasn't been returned for machine {}" + \
-                ", it is essential to be obtained".format(uuid)
+            raise RuntimeError(f"NOS ID hasn't been returned for machine {uuid}")
 
         machine = data.Machine.get_one_for_update({'_id': request.machine}, conn=conn)
         machine.provider_id = uuid
@@ -106,7 +89,7 @@ def process_deploy_action(conn, action, vc):
         action.lock = -1
         action.save(conn=conn)
     except Exception:
-        settings.raven.captureException(exc_info=True)
+        Settings.raven.captureException(exc_info=True)
         logger.error('action_deploy exception: ', exc_info=True)
 
         request.state = RequestState.FAILED
@@ -118,7 +101,7 @@ def process_deploy_action(conn, action, vc):
         action.lock = -1
         action.save(conn=conn)
     finally:
-        logger.info('{}-{}<-'.format(os.getpid(), action.id))
+        logger.info(f'{os.getpid()}-{action.id}<-')
 
 
 def action_undeploy(request, machine, vc):
@@ -138,6 +121,7 @@ def action_start(request, machine, vc):
 def action_stop(request, machine, vc):
     vc.stop(machine.provider_id)
     return MachineState.STOPPED
+
 
 def action_reset(request, machine, vc):
     vc.reset(machine.provider_id)
@@ -176,7 +160,7 @@ def action_get_info(request, machine_ro, vc, action, conn):
 
 def enqueue_get_info_request(request, machine, conn):
     # create another task to get info about that machine
-    logger.debug('creating another get_info action for {}'.format(request.machine))
+    logger.debug(f'creating another get_info action for {request.machine}')
     new_request = data.Request(type=RequestType.GET_INFO, machine=str(machine.id))
     new_request.save(conn=conn)
     machine.requests.append(new_request.id)
@@ -191,9 +175,9 @@ def enqueue_get_info_request(request, machine, conn):
 
 
 def action_take_screenshot(request, machine, vc, conn):
-    ss_destination = settings.app['service']['screenshot_store']
+    ss_destination = Settings.app['service']['screenshot_store']
     if ss_destination not in ['db', 'hcp']:
-        logger.warn(f'wrong configuration for screenshot_store: {ss_destination}')
+        logger.warning(f'wrong configuration for screenshot_store: {ss_destination}')
         ss_destination = 'db'
 
     screenshot_data = vc.take_screenshot(machine.provider_id, store_to=ss_destination)
@@ -211,7 +195,7 @@ def action_take_screenshot(request, machine, vc, conn):
             ss.status = "error"
         ss.save(conn=conn)
     else:
-        settings.raven.captureMessage('Error obtaining subject_id from Request')
+        Settings.raven.captureMessage('Error obtaining subject_id from Request')
     return None
 
 
@@ -229,7 +213,7 @@ def action_take_snapshot(request, machine, vc, conn):
             machine.save(conn=conn)
 
     else:
-        settings.raven.captureMessage('Error obtaining subject_id for take snapshot request')
+        Settings.raven.captureMessage('Error obtaining subject_id for take snapshot request')
     return None
 
 
@@ -242,7 +226,7 @@ def action_restore_snapshot(request, machine, vc, conn):
         snap.status = 'success' if result is True else 'failed'
         snap.save(conn=conn)
     else:
-        settings.raven.captureMessage('Error obtaining subject_id for restore snapshot request')
+        Settings.raven.captureMessage('Error obtaining subject_id for restore snapshot request')
 
     return None
 
@@ -261,28 +245,23 @@ def action_delete_snapshot(request, machine, vc, conn):
             machine.snapshots.remove(snap.id)
             machine.save(conn=conn)
     else:
-        settings.raven.captureMessage('Error obtaining subject_id for delete snapshot request')
+        Settings.raven.captureMessage('Error obtaining subject_id for delete snapshot request')
 
     return None
 
 
 def process_other_actions(conn, action, vc):
     logger = logging.getLogger('action_others')
-    logger.info('{}-{}->'.format(os.getpid(), action.id))
+    logger.info(f'{os.getpid()}-{action.id}->')
 
     try:
         request = data.Request.get_one_for_update({'_id': action.request}, conn=conn)
         request_type = request.type
         machine_ro = data.Machine.get_one({'_id': request.machine}, conn=conn)
 
-        logger.info('{}-{}->{}|machine.state:{}|uuid:{}'.format(
-                                                            os.getpid(),
-                                                            action.id,
-                                                            request.type,
-                                                            machine_ro.state,
-                                                            machine_ro.provider_id
-        )
-        )
+        m = f'{os.getpid()}-{action.id}->{request.type}|machine.state:{machine_ro.state}|uuid:{machine_ro.provider_id}'
+        logger.info(m)
+
         if request_type is not RequestType.UNDEPLOY:
             if not machine_ro.state.can_be_changed():
                 request.state = RequestState.ABORTED
@@ -313,7 +292,7 @@ def process_other_actions(conn, action, vc):
             new_machine_state = action_delete_snapshot(request, machine_ro, vc, conn)
         else:
             # this should not happen
-            settings.raven.captureMessage(f'Unhandled request type: {request_type}')
+            Settings.raven.captureMessage(f'Unhandled request type: {request_type}')
             # will not be actually saved, only for setting request as failed
             new_machine_state = MachineState.FAILED
 
@@ -334,16 +313,16 @@ def process_other_actions(conn, action, vc):
             enqueue_get_info_request(request, machine, conn)
 
     except Exception as e:
-        settings.raven.captureException(exc_info=True)
-        logger.error('Exception while processing action {}: '.format(action.id), exc_info=True)
+        Settings.raven.captureException(exc_info=True)
+        logger.error(f'Exception while processing action {action.id}: ', exc_info=True)
         raise e
 
     finally:
-        logger.info('{}-{}<-'.format(os.getpid(), action.id))
+        logger.info(f'{os.getpid()}-{action.id}<-')
 
 
 def signal_handler(signum, frame):
-    logger.info('worker aborted by signal: {}'.format(signum))
+    logger.info(f'worker aborted by signal: {signum}')
     global process_actions
     process_actions = False
 
@@ -354,10 +333,7 @@ if __name__ == '__main__':
         mode = sys.argv[1]
     else:
         mode = 'other'
-    data.Connection.connect(
-                                'conn1',
-                                dsn=settings.app['db']['dsn']
-    )
+    data.Connection.connect('conn1', dsn=Settings.app['db']['dsn'])
     vc = vcenter.VCenter()
     vc.connect()
 
@@ -368,18 +344,14 @@ if __name__ == '__main__':
 
     process_actions = True
     while process_actions:
-        time.sleep(settings.app['worker']['loop_initial_sleep'])
+        time.sleep(Settings.app['worker']['loop_initial_sleep'])
         with data.Connection.use('conn1') as conn:
             try:
-                action = data.Action.get_one_for_update_skip_locked(
-                                                                    {'type': mode, 'lock': 0},
-                                                                    conn=conn
-                )
-
+                action = data.Action.get_one_for_update_skip_locked({'type': mode, 'lock': 0}, conn=conn)
                 if action:
                     actions_counter += 1
                     if mode == 'deploy':
-                        if actions_counter > settings.app['worker']['load_refresh_interval']:
+                        if actions_counter > Settings.app['worker']['load_refresh_interval']:
                             actions_counter = 0
                             vc.refresh_destination_datastore()
                             vc.refresh_destination_resource_pool()
@@ -388,16 +360,13 @@ if __name__ == '__main__':
                         process_other_actions(conn, action, vc)
                 else:
                     idle_counter += 1
-                    if idle_counter > settings.app['worker']['idle_counter']:
+                    if idle_counter > Settings.app['worker']['idle_counter']:
                         vc.idle()
                         idle_counter = 0
-                    time.sleep(settings.app['worker']['loop_idle_sleep'])
+                    time.sleep(Settings.app['worker']['loop_idle_sleep'])
             except Exception:
-                settings.raven.captureException(exc_info=True)
-                logger.error(
-                                'Exception while processing action: {}'.format(action.id),
-                                exc_info=True
-                )
+                Settings.raven.captureException(exc_info=True)
+                logger.error(f'Exception while processing action: {action.id}', exc_info=True)
                 action.lock = -1
                 action.save(conn=conn)
 

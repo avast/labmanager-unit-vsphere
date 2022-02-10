@@ -1,17 +1,14 @@
 import datetime
-import web.modeltr as data
-import logging
-import web.enhanced_logging as el
-from sanic.exceptions import InvalidUsage
+
 import sanic.response
 from sanic import Blueprint
+from sanic.exceptions import InvalidUsage
+
+import web.enhanced_logging as el
+import web.modeltr as data
 
 snapshots = Blueprint('snapshots')
 
-
-# @snapshots.route('/machines/<machine_id>/snapshots', methods=['GET'])
-# async def machines_deploy(request, machine_id):
-#     return {'check': 'machines_get_snapshots {}, rq: {}'.format(machine_id, request.headers)}
 
 @snapshots.route('/machines/<machine_id>/snapshots', methods=['POST'])
 @el.log_func_boundaries

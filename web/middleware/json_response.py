@@ -1,10 +1,6 @@
 import logging
-import sys
-import datetime
-import json
-from sanic.exceptions import abort
-import sanic.exceptions
-from sanic.response import json as sjson
+
+from sanic.response import json as sanic_json
 
 logger = logging.getLogger()
 
@@ -47,7 +43,7 @@ async def json_response(request, response):
     else:
         return response
 
-    return sjson(
+    return sanic_json(
                     {
                         'responses': result
                     },

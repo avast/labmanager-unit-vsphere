@@ -1,5 +1,4 @@
-import datetime
-from .base import trString, trList, trId, trSaveTimestamp, trLock, trInt, trTimestamp
+from .base import trInt, trTimestamp
 from .document import *
 
 

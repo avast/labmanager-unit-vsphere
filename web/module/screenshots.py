@@ -1,9 +1,10 @@
 import datetime
+import logging
 
 from sanic import Blueprint
-import web.modeltr as data
-import logging
 from sanic.response import json as sjson
+
+import web.modeltr as data
 
 logger = logging.getLogger(__name__)
 

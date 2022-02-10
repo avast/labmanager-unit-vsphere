@@ -1,14 +1,10 @@
-from sanic.exceptions import abort
-from sanic.response import json as sjson
+import logging
+import time
 from sanic import Blueprint
 
 import web.modeltr as data
-
-from web.settings import Settings as settings
+from web.settings import Settings
 from web.modeltr.enums import MachineState
-
-import logging
-import time
 
 logger = logging.getLogger(__name__)
 
@@ -17,16 +13,16 @@ capabilities = Blueprint('capabilities')
 
 class Capabilities:
     _free_slots = 0
-    _slot_limit = settings.app['slot_limit']
+    _slot_limit = Settings.app['slot_limit']
     _last_check = 0
-    _labels = settings.app['labels'] + ["unit:{}".format(settings.app['unit_name'])]
+    _labels = Settings.app['labels'] + ["unit:{}".format(Settings.app['unit_name'])]
 
     @staticmethod
     async def fetch(forced=False):
         used_slots = Capabilities._slot_limit - Capabilities._free_slots
         logger.debug("Capabilities last check: {}".format(Capabilities._last_check))
-        caching_period = settings.app['service']['capabilities']['caching_period']
-        caching_threshold = settings.app['service']['capabilities']['caching_enabled_threshold']
+        caching_period = Settings.app['service']['capabilities']['caching_period']
+        caching_threshold = Settings.app['service']['capabilities']['caching_enabled_threshold']
         if forced or \
            used_slots > int(Capabilities._slot_limit*(caching_threshold/100)) or \
            int(time.time()) - Capabilities._last_check > caching_period:

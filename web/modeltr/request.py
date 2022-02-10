@@ -1,6 +1,4 @@
-import web.settings
-import datetime
-from .base import trString, trList, trId, trSaveTimestamp, trRequestState, trRequestType
+from .base import trString, trSaveTimestamp, trRequestState, trRequestType
 from .enums import RequestState
 from .document import *
 

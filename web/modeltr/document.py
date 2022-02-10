@@ -1,6 +1,6 @@
 import psycopg2
 import json
-from .base import trString, trList, trId, trSaveTimestamp, trLock, trHiddenString
+from .base import trId, trLock
 from .base import __all__ as MODELTR_TYPES_LIST
 from .enums import StrEnumBase
 import datetime
@@ -22,7 +22,7 @@ class DocumentList(list):
             raise RuntimeError('query yielded no result')
 
 
-class Document(object):
+class Document:
     id = trId
     __datetime_format = "%Y-%m-%d %H:%M:%S"
 
@@ -62,21 +62,16 @@ class Document(object):
         # check for wrong arguments
         for arg in kwargs:
             if arg not in self.__types:
-                raise RuntimeError('Unexpected property: {} used'.format(arg))
+                raise RuntimeError(f'Unexpected property: {arg} used')
 
         # setup collection name
         self.collection_name = type(self).__name__.lower()
 
     def __check_types(self):
         for prop, typ in self.__types.items():
-            if type(getattr(self, prop)) != typ:
-                raise ValueError(
-                    'property {} has unexpected type: {} instead of {}'.format(
-                        prop,
-                        type(getattr(self, prop)),
-                        typ
-                    )
-                )
+            prop_type = type(getattr(self, prop))
+            if prop_type != typ:
+                raise ValueError(f'property {prop} has unexpected type: {prop_type} instead of {typ}')
 
     def save(self, **kwargs):
         self.__check_types()
@@ -84,10 +79,7 @@ class Document(object):
             raise ValueError('conn not specified while saving some Document')
 
         if self.__document_updated_property:
-            self.__logger.debug('setting document updated at property for {} {}'.format(
-                type(self).__name__.lower(),
-                self.id
-            ))
+            self.__logger.debug(f'setting document updated at property for {type(self).__name__.lower()} {self.id}')
             setattr(self, self.__document_updated_property, datetime.datetime.now())
 
         if self.id == trId._default:
@@ -95,7 +87,8 @@ class Document(object):
         else:
             self.__save(**kwargs)
 
-    def __get_connection(self, **kwargs):
+    @staticmethod
+    def __get_connection(**kwargs):
         if type(kwargs['conn']).__name__ == 'Connection':
             return kwargs['conn']
 
@@ -105,7 +98,7 @@ class Document(object):
         raise RuntimeError()
 
     def __save(self, **kwargs):
-        self.__logger.debug('saving {} {}'.format(type(self).__name__.lower(), self.id))
+        self.__logger.debug(f'saving {type(self).__name__.lower()} {self.id}')
         connection = self.__get_connection(**kwargs)
 
         cur = connection.get_cursor()
@@ -158,24 +151,8 @@ class Document(object):
 
         return result
 
-#    @classmethod
-#    def __fix_query(cls, query):
-#        new_query = {}
-#        for key, val in query.items():
-#            new_query[key] = val if key != '_id' else bson.objectid.ObjectId(val)
-#        return new_query
-
-#    @classmethod
-#    def _db_record_to_instance(cls, record):
-#        new_document = cls(id=str(record['_id']))
-#        for prop in record.keys():
-#            if prop != '_id':
-#                setattr(new_document, prop, record[prop])
-#        return new_document
-
     @classmethod
     def _db_record_to_instance_pq(cls, record):
-        # print(record)
         record_id = record[0]
         record_data = record[2]
         new_document = cls(id=str(record_id))
@@ -190,7 +167,7 @@ class Document(object):
             if target_type == datetime.datetime:
                 try:
                     cv = datetime.datetime.strptime(val, cls.__datetime_format)
-                except ValueError as ex:
+                except ValueError:
                     cv = datetime.datetime.min
                 setattr(
                         new_document,
@@ -224,7 +201,6 @@ class Document(object):
 
     @classmethod
     def get(cls, query, **kwargs):
-        collection_name = cls.__name__.lower()
         if 'conn' not in kwargs:
             raise ValueError('parameter conn must be specified')
         connection = kwargs['conn']
@@ -235,24 +211,15 @@ class Document(object):
         cur = connection.get_cursor()
         cur.execute(sql_query[0], sql_query[1])
         connection.wait_for_completion()
-        # cur.execute("SELECT * FROM documents where id = %s;",[query["_id"]])
         if cur.rowcount == 0:
             logger = logging.getLogger(__name__)
-            logger.debug("0 records returned from: >>{}<<".format(cur.query))
+            logger.debug(f'0 records returned from: >>{cur.query}<<')
         for item in cur.fetchall():
             result.append(cls._db_record_to_instance_pq(item))
         return result
 
-        # collection = connection.client[connection.database][collection_name]
-        # cresult = collection.find(cls.__fix_query(query), session=connection.session)
-        # result = DocumentList()
-        # for item in cresult:
-        #     result.append(cls._db_record_to_instance(item))
-        # return result
-
     @classmethod
     def __get_one_custom(cls, query, extend, **kwargs):
-        collection_name = cls.__name__.lower()
         if 'conn' not in kwargs:
             raise ValueError('parameter conn must be specified')
         connection = kwargs['conn']
@@ -280,7 +247,8 @@ class Document(object):
         try:
             return cls.__get_one_custom(query, "LIMIT 1 FOR UPDATE NOWAIT;", **kwargs)
         except psycopg2.OperationalError as e:
-            self.__logger.error('OperationalError while processing request: ', exc_info=True)
+            logger = logging.getLogger(__name__)
+            logger.error('OperationalError while processing request: ', exc_info=True)
             return None
 
     @classmethod
@@ -292,7 +260,8 @@ class Document(object):
                             **kwargs
             )
         except psycopg2.OperationalError as e:
-            self.__logger.error('OperationalError while processing request: ', exc_info=True)
+            logger = logging.getLogger(__name__)
+            logger.error('OperationalError while processing request: ', exc_info=True)
             return None
 
     @classmethod
@@ -304,7 +273,6 @@ class Document(object):
 
     @classmethod
     def get_eldest_excl(cls, query,  **kwargs):
-        collection_name = cls.__name__.lower()
         if 'conn' not in kwargs:
             raise ValueError('parameter conn must be specified')
         connection = kwargs['conn']

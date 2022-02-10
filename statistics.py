@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 
-from datetime import datetime
-import os
-import yaml
 import logging
-import time
-import requests
-import json
+import os
 import socket
+import time
+from datetime import datetime
+
+import requests
+import yaml
 
 logging.basicConfig(
     level='INFO',
@@ -22,42 +22,29 @@ def load_config(config_file, env):
 
 
 def obtain_statistics(cluster, endpoint, headers, host, port, stats_path):
-    logger.info("sending statistics for cluster: {}".format(cluster))
+    logger.info(f"sending statistics for cluster: {cluster}")
     # get data
     try:
         response = requests.get(
-            '{}capabilities'.format(endpoint),
+            f'{endpoint}capabilities',
             headers=headers,
             verify=False
         )
         if response.status_code != 200:
-            logger.warning(
-                "cannot get capabilities of cluster {}, stats not available!".format(cluster)
-            )
+            logger.warning(f"cannot get capabilities of cluster {cluster}, stats not available!")
 
         out_json = response.json()
         maximum = out_json['responses'][0]['result']['slot_limit']
         free = out_json['responses'][0]['result']['free_slots']
     except Exception as ex:
-        logger.warn("Exception while obtaining capabilities occured: {}\n\nskipped\n".format(ex))
+        logger.warning(f"Exception while obtaining capabilities occurred: {ex}\n\nskipped\n")
         return
 
     consumed = maximum - free
     timestamp = str(datetime.strftime(datetime.now(), '%s'))
-    out_string = "{}.{}.count {} {}\n{}.{}.used {} {}\n{}.{}.percent {} {}\n".format(
-        stats_path,
-        cluster,
-        maximum,
-        timestamp,
-        stats_path,
-        cluster,
-        consumed,
-        timestamp,
-        stats_path,
-        cluster,
-        consumed*100/maximum,
-        timestamp
-    )
+    out_string = f"{stats_path}.{cluster}.count {maximum} {timestamp}\n" \
+                 f"{stats_path}.{cluster}.used {consumed} {timestamp}\n" \
+                 f"{stats_path}.{cluster}.percent {consumed * 100 / maximum} {timestamp}\n"
 
     # open socket
     try:
@@ -67,7 +54,7 @@ def obtain_statistics(cluster, endpoint, headers, host, port, stats_path):
             s.sendall(bytes(out_string, 'utf-8'))
             # close socket
     except Exception as ex:
-        logger.warn("Exception while sending stats occured: {}\n\nskipped\n".format(ex))
+        logger.warning(f"Exception while sending stats occurred: {ex}\n\nskipped\n")
 
 
 if __name__ == '__main__':
@@ -75,7 +62,7 @@ if __name__ == '__main__':
     config_file = os.getenv('CONFIG', './statistics.yaml')
     env = os.getenv('ENV', 'production')
     config = {}
-    logger = logging.getLogger('idle_ungeployer_{}'.format(env))
+    logger = logging.getLogger(f'idle_ungeployer_{env}')
 
     while True:
         config = load_config(config_file, env)

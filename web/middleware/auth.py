@@ -1,6 +1,4 @@
 import logging
-import sys
-import datetime
 from sanic.exceptions import abort
 
 logger = logging.getLogger()

@@ -1,13 +1,12 @@
 #!/usr/bin/env python3
 
-from web.settings import Settings as settings
 import logging
+import threading
 
 import web.lm_unit
 import web.modeltr as data
 import web.settings
-import threading
-
+from web.settings import Settings
 
 if __name__ == '__main__':
 
@@ -15,18 +14,11 @@ if __name__ == '__main__':
 
     @web.lm_unit.lm_unit_webserver.listener('before_server_start')
     def cnf(sanic, loop):
-        logger.debug('before_start {} {} {}'.format(
-                                                    sanic,
-                                                    hex(id(loop)),
-                                                    threading.current_thread().name
-        ))
-    data.Connection.connect(
-                            dsn=settings.app['db']['dsn'],
-                            async_mode=True
-    )
+        logger.debug(f'before_start {sanic} {hex(id(loop))} {threading.current_thread().name}')
 
-    web.lm_unit.lm_unit_webserver.run(
-                                        host=settings.app['service']['host'],
-                                        port=settings.app['service']['port'],
-                                        workers=settings.app['service']['workers']
-    )
+    data.Connection.connect(dsn=Settings.app['db']['dsn'], async_mode=True)
+
+    host = Settings.app['service']['host']
+    port = Settings.app['service']['port']
+    workers = Settings.app['service']['workers']
+    web.lm_unit.lm_unit_webserver.run(host=host, port=port, workers=workers)

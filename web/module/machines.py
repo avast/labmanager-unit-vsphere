@@ -1,24 +1,16 @@
+import asyncio
 import datetime
+import logging
+import threading
 
-from web.settings import Settings as settings
-from sanic.response import json as sjson
+import sanic.exceptions
 import sanic.response
-from sanic.exceptions import abort
 from sanic import Blueprint
 
-import web.modeltr as data
-
-import web.middleware.obtain_request
-import web.module.capabilities as capabilities
-import sanic.exceptions
-import json
-
-import sys
-import threading
-import asyncio
-import logging
 import web.enhanced_logging as el
-
+import web.modeltr as data
+import web.module.capabilities as capabilities
+from web.settings import Settings
 
 logger = logging.getLogger(__name__)
 
@@ -42,7 +34,7 @@ async def check_payload_deploy(request):
         raise sanic.exceptions.InvalidUsage(f'label specification {labels} contains multiple \'template\' labels')
 
     # test if template is supported by unit
-    supported_labels = settings.app['labels']
+    supported_labels = Settings.app['labels']
     for template_label in template_labels_list:
         if template_label not in supported_labels:
             raise sanic.exceptions.InvalidUsage(f'\'{template_label}\' label is not supported by this unit')
@@ -50,7 +42,7 @@ async def check_payload_deploy(request):
 
 @machines.middleware('request')
 async def obtain_request(request):
-    logger.debug("Request obtained: {}".format(request))
+    logger.debug(f'Request obtained: {request}')
 
 
 @machines.exception(sanic.exceptions.InvalidUsage)
@@ -63,16 +55,14 @@ def handle_exceptions(request, exception):
 async def check_resources():
     await capabilities.Capabilities.fetch(forced=True)
     if capabilities.Capabilities.get_free_slots() < 1:
-        raise sanic.exceptions.InvalidUsage(
-                'no extra machine can be currently deployed, \
-please wait till another slot is to be freed'
-        )
+        raise sanic.exceptions.InvalidUsage('Unit is currently full and cannot process any new machine at the moment.')
 
 
 @machines.route('/machines', methods=['POST'])
 @el.log_func_boundaries
 async def machine_deploy(request):
-    el.log_d(request, "POST /machines wanted by: {}".format(request.headers.get("AUTHORISED_LOGIN", "<n/a>")))
+    login = request.headers.get('AUTHORISED_LOGIN', 'Not specified')
+    el.log_d(request, f'POST /machines wanted by: {login}')
     await check_payload_deploy(request)
     labels = request.headers['json_params']['labels']
     await check_resources()
@@ -81,7 +71,8 @@ async def machine_deploy(request):
         new_request = data.Request(type=data.RequestType.DEPLOY)
         new_request.save(conn=conn)
         el.log_d(request, "new request saved")
-        if settings.app['service']['personalised']:
+        if Settings.app['service']['personalised']:
+            # TODO handle case when request.headers["AUTHORISED_LOGIN"] is not specified?
             new_machine = data.Machine(
                 labels=labels,
                 requests=[new_request.id],
@@ -115,8 +106,8 @@ async def get_machines(request, connection, **kwargs):
     raw_args = request.raw_args
     if 'flt' in kwargs:
         raw_args = {**raw_args, **kwargs['flt']}
-    if settings.app['service']['personalised'] and \
-       request.headers.get("AUTHORISED_AS", "None") == "user":
+    if Settings.app['service']['personalised'] and request.headers.get("AUTHORISED_AS", "None") == "user":
+        # TODO: are we sure that request.headers["AUTHORISED_LOGIN"] is specified?
         return data.Machine.get(
             {**raw_args, **{'owner': request.headers["AUTHORISED_LOGIN"]}},
             conn=connection
@@ -133,9 +124,7 @@ async def show_hidden_strings(request):
 async def machines_get_info(request):
     for key in request.raw_args.keys():
         if key not in ['state']:
-            raise sanic.exceptions.InvalidUsage(
-                'malformatted parameter: {}'.format(key)
-            )
+            raise sanic.exceptions.InvalidUsage(f'malformed parameter: {key}')
 
     with data.Connection.use() as conn:
         await asyncio.sleep(0.1)
@@ -155,7 +144,7 @@ async def machines_get_info(request):
 
 @machines.route('/machines/<machine_id>', methods=['GET'])
 async def machine_get_info(request, machine_id):
-    logger.debug('Current thread name: {}'. format(threading.current_thread().name))
+    logger.debug(f'Current thread name: {threading.current_thread().name}')
     with data.Connection.use() as conn:
         await asyncio.sleep(0.1)
         try:
@@ -174,9 +163,9 @@ async def check_machine_owner(machine, request):
         raise sanic.exceptions.InvalidUsage("Specified resource cannot be obtained")
     if request.headers.get("AUTHORISED_AS", "None") == "admin":
         return
-    if settings.app['service']['personalised'] and \
-       machine.owner != request.headers["AUTHORISED_LOGIN"]:
-        raise sanic.exceptions.InvalidUsage("Specified resource cannot be altered")
+    if Settings.app['service']['personalised'] and machine.owner != request.headers["AUTHORISED_LOGIN"]:
+        # TODO: is request.headers["AUTHORISED_LOGIN"] safe?
+        raise sanic.exceptions.InvalidUsage('Not authorized to alter specified resource.')
 
 
 @machines.route('/machines/<machine_id>', methods=['DELETE'])
@@ -198,7 +187,7 @@ async def machine_delete(request, machine_id):
         el.log_d(request, "new_action saved")
 
     return {
-            'request_id': '{}'.format(new_request.id),
+            'request_id': str(new_request.id),
             'is_last': False
     }
 
@@ -209,7 +198,7 @@ async def machine_do_start_stop_reset(request, machine_id):
 
     action = request.headers.get('json_params').get('action')
     if action not in ['start', 'stop', 'restart']:
-        raise sanic.exceptions.InvalidUsage('malformatted input json data, invalid or none \'action\' specified')
+        raise sanic.exceptions.InvalidUsage('malformed input json data, invalid or none \'action\' specified')
 
     request_type = data.RequestType(action)
 
@@ -219,9 +208,8 @@ async def machine_do_start_stop_reset(request, machine_id):
         machine = data.Machine.get_one_for_update({'_id': machine_id}, conn=conn)
         # reset can be invoked only on running machine
         if request_type is data.RequestType.RESTART and machine.state is not data.MachineState.RUNNING:
-            raise sanic.exceptions.InvalidUsage('Machine must be in state \'{}\' to invoke \'reset\', '
-                                                'but was in state \'{}\'!'
-                                                .format(data.MachineState.RUNNING, machine.state))
+            msg = f'Machine must be running to invoke \'reset\', but was in state \'{machine.state}\''
+            raise sanic.exceptions.InvalidUsage(msg)
 
         await check_machine_owner(machine, request)
         new_request = data.Request(type=request_type, machine=str(machine_id))
