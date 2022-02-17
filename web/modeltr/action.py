@@ -1,4 +1,4 @@
-from .base import trInt, trTimestamp
+from .base import trInt, trTimestamp, trSaveTimestamp, trString
 from .document import *
 
 

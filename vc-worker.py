@@ -202,7 +202,7 @@ def action_take_screenshot(request, machine, vc, conn):
 def action_take_snapshot(request, machine, vc, conn):
     if request.subject_id:
         snap_ro = data.Snapshot.get_one({'_id': request.subject_id}, conn=conn)
-        result = vc.take_snapshot(uuid=machine.provider_id, snapshot_name=snap_ro.get_uniq_name())
+        result = vc.take_snapshot(machine_uuid=machine.provider_id, snapshot_name=snap_ro.get_uniq_name())
         snap = data.Snapshot.get_one_for_update({'_id': request.subject_id}, conn=conn)
         snap.status = 'success' if result is True else 'failed'
         snap.save(conn=conn)
@@ -221,7 +221,7 @@ def action_take_snapshot(request, machine, vc, conn):
 def action_restore_snapshot(request, machine, vc, conn):
     if request.subject_id:
         snap_ro = data.Snapshot.get_one({'_id': request.subject_id}, conn=conn)
-        result = vc.revert_snapshot(uuid=machine.provider_id, snapshot_name=snap_ro.get_uniq_name())
+        result = vc.revert_snapshot(machine_uuid=machine.provider_id, snapshot_name=snap_ro.get_uniq_name())
         snap = data.Snapshot.get_one_for_update({'_id': request.subject_id}, conn=conn)
         snap.status = 'success' if result is True else 'failed'
         snap.save(conn=conn)
@@ -235,7 +235,7 @@ def action_restore_snapshot(request, machine, vc, conn):
 def action_delete_snapshot(request, machine, vc, conn):
     if request.subject_id:
         snap_ro = data.Snapshot.get_one({'_id': request.subject_id}, conn=conn)
-        result = vc.remove_snapshot(uuid=machine.provider_id, snapshot_name=snap_ro.get_uniq_name())
+        result = vc.remove_snapshot(machine_uuid=machine.provider_id, snapshot_name=snap_ro.get_uniq_name())
         snap = data.Snapshot.get_one_for_update({'_id': request.subject_id}, conn=conn)
         snap.status = 'success' if result is True else 'failed'
         snap.save(conn=conn)
