@@ -263,6 +263,28 @@ class VCenter:
                     )
         return task
 
+    def __get_instant_clone_task(self, source_machine, destination_machine_name, destination_folder):
+        """
+        Creates task for performing an instant clone from existing source machine
+        :param source_machine: machine to base new machine on
+        :param destination_machine_name: name of newly created machine
+        :param destination_folder: location of the machine
+        :return: task
+        """
+        src_machine_state = source_machine.runtime.powerState
+        if src_machine_state != 'poweredOn':
+            raise RuntimeError(f'Machine {repr(source_machine.name)} must be \'running\' to perform instant clone, '
+                               f'but was {repr(src_machine_state)}')
+        relocate_spec = vim.vm.RelocateSpec()
+        relocate_spec.folder = destination_folder
+        relocate_spec.pool = self.destination_resource_pool
+
+        instant_clone_spec = vim.vm.InstantCloneSpec(
+            name=destination_machine_name,
+            location=relocate_spec
+        )
+
+        return source_machine.InstantClone_Task(spec=instant_clone_spec)
 
     def get_machine_by_uuid(self, machine_uuid):
         self.__logger.debug(f'-> get_machine_by_uuid({machine_uuid})')
@@ -287,6 +309,8 @@ class VCenter:
         retry_delete_count = Settings.app['vsphere']['retries']['delete']
         vm = None
         vm_uuid = None
+        clone_approach = Settings.app['vsphere'].get('clone_approach', 'linked_clone')
+
         for i in range(retry_deploy_count):
             try:
                 template = self.__search_machine_by_name(template_name)
@@ -300,14 +324,23 @@ class VCenter:
                 if template.snapshot:
                     self.__logger.debug('snapshot: {}'.format(template.snapshot.currentSnapshot))
 
-                machine_folder = self.vm_folders.create_folder(Settings.app['vsphere']['folder'])
+                machine_folder= self.vm_folders.create_folder(Settings.app['vsphere']['folder'])
 
-                task = self.__get_linked_clone_task(
-                    template,
-                    machine_name,
-                    machine_folder,
-                    Settings.app['vsphere']['default_snapshot_name']
-                )
+                if clone_approach == 'linked_clone':
+                    task = self.__get_linked_clone_task(
+                        template,
+                        machine_name,
+                        machine_folder,
+                        Settings.app['vsphere']['default_snapshot_name']
+                    )
+                elif clone_approach == 'instant_clone':
+                    task = self.__get_instant_clone_task(
+                        template,
+                        machine_name,
+                        machine_folder
+                    )
+                else:
+                    raise RuntimeError("vsphere/clone_approach has invalid value of {}".format(clone_approach))
 
                 vm = self.wait_for_task(task)
                 self.__logger.debug('Task finished with value: {}'.format(vm))
@@ -370,6 +403,18 @@ class VCenter:
                         )
                         self.__sleep_between_tries()
                         raise e
+                if clone_approach == 'instant_clone':
+                    # reset the network inside the VM
+                    self.__logger.debug(f'Resetting network in instant cloned VM {vm_uuid}')
+                    username = '' # TODO load from settings
+                    password = '' # TODO load from settings
+                    ec = self.run_process_in_vm(machine_uuid=vm_uuid,
+                                                username=username,
+                                                password=password,
+                                                program_path='schtasks.exe',
+                                                program_arguments='/run /tn restartnet')
+                    result = 'succeeded' if ec == 0 else 'failed'
+                    self.__logger.debug(f'Resetting network in instant cloned VM {vm_uuid} {result}')
 
                 return vm_uuid
         raise RuntimeError("virtual machine hasn't been deployed")
@@ -731,6 +776,28 @@ class VCenter:
             self.__logger.debug("obtaining nos_id on machine {} failed".format(machine_uuid), exc_info=True)
         finally:
             return result
+
+    def run_process_in_vm(self, machine_uuid, username, password, program_path, program_arguments='') -> int:
+        self.__logger.debug(f'-> run_process_in_vm({machine_uuid}, {username}, ***, {program_path}, {program_arguments})')
+        sleep_delta = 0.5
+        vm = self.content.searchIndex.FindByUuid(None, machine_uuid, True)
+        creds = vim.vm.guest.NamePasswordAuthentication(username=username, password=password)
+        program_spec = vim.vm.guest.ProcessManager.ProgramSpec(programPath=program_path, arguments=program_arguments)
+        process_manager = self.content.guestOperationsManager.processManager
+        res = process_manager.StartProgramInGuest(vm, creds, program_spec)
+        if res > 0:
+            while True:
+                process_info = process_manager.ListProcessesInGuest(vm, creds, [res]).pop()
+                pid_exitcode = process_info.exitCode
+                if isinstance(pid_exitcode, int):
+                    self.__logger.debug(f'Process pid {process_info.pid} {process_info.cmdLine} finished;\n{process_info}')
+                    self.__logger.debug(f'<- run_process_in_vm(): {pid_exitcode}')
+                    return pid_exitcode
+                else:
+                    self.__logger.debug(f'Process pid {process_info.pid} {process_info.cmdLine} still running; sleep({sleep_delta})')
+                    time.sleep(sleep_delta)
+        else:
+            raise RuntimeError(f"Could not start {program_spec.programPath} process!")
 
     def _get_machine_ips(self, vm, machine_uuid):
         result = []

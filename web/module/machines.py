@@ -63,7 +63,7 @@ async def check_resources():
 async def machine_deploy(request):
     login = request.headers.get('AUTHORISED_LOGIN', 'Not specified')
     el.log_d(request, f'POST /machines wanted by: {login}')
-    await check_payload_deploy(request)
+    #await check_payload_deploy(request)
     labels = request.headers['json_params']['labels']
     await check_resources()
     el.log_d(request, "attempting to create db session")
