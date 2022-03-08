@@ -807,6 +807,18 @@ class VCenter:
             return result
 
     def run_process_in_vm(self, machine_uuid, username, password, program_path, program_arguments='') -> int:
+        """
+        Runs process with args in VM under 'username', using VMWare tools
+        :param machine_uuid: VM UUID specification
+        :param username: login username of user in VM
+        :param password: login password for 'username' in VM
+        :param program_path: path to program
+        :param program_arguments: optional, program arguments
+        :return: exit code of process
+
+        Note: Process stderr and stdout is not collected as it's not directly supported by VMWare tools
+
+        """
         self.__logger.debug(f'-> run_process_in_vm({machine_uuid}, {username}, ***, {program_path}, {program_arguments})')
         sleep_delta = 0.5
         vm = self.content.searchIndex.FindByUuid(None, machine_uuid, True)
