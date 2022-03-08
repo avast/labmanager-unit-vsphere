@@ -1,4 +1,5 @@
 import base64
+import enum
 import logging
 import re
 import random
@@ -8,11 +9,16 @@ import time
 import uuid
 import urllib.request
 
-from typing import Union
+from typing import Union, Optional
 
 from pyVim.connect import SmartConnect
 from pyVmomi import vim, vmodl
 from web.settings import Settings
+
+
+class CloneApproach(enum.Enum):
+    LINKED_CLONE = 'linked_clone'
+    INSTANT_CLONE = 'instant_clone'
 
 
 class VCenter:
@@ -278,13 +284,73 @@ class VCenter:
         relocate_spec = vim.vm.RelocateSpec()
         relocate_spec.folder = destination_folder
         relocate_spec.pool = self.destination_resource_pool
-
-        instant_clone_spec = vim.vm.InstantCloneSpec(
-            name=destination_machine_name,
-            location=relocate_spec
-        )
+        instant_clone_spec = vim.vm.InstantCloneSpec(name=destination_machine_name, location=relocate_spec)
 
         return source_machine.InstantClone_Task(spec=instant_clone_spec)
+
+    def __get_clone_task(self,
+                         clone_approach: CloneApproach,
+                         template: vim.VirtualMachine,
+                         target_machine_name: str,
+                         machine_folder: str,
+                         default_snap_name: str):
+
+        if clone_approach is CloneApproach.LINKED_CLONE:
+            task = self.__get_linked_clone_task(template, target_machine_name, machine_folder, default_snap_name)
+
+        elif clone_approach is CloneApproach.INSTANT_CLONE:
+            task = self.__get_instant_clone_task(template, target_machine_name, machine_folder)
+        else:
+            raise ValueError(f'Invalid clone_approach value: {clone_approach}')
+
+        return task
+
+    def clone_vm(self, template_name: str, machine_name: str, clone_approach: CloneApproach) -> Optional[vim.VirtualMachine]:
+        """
+        Clones VM specified by template_name to target VM specified by machine_name
+        :param template_name: source machine name
+        :param machine_name:  target machine name
+        :param clone_approach: clone strategy (instant or linked)
+        :return: VM object if successful, else None
+        """
+        template = self.__search_machine_by_name(template_name)
+        if not template:
+            raise RuntimeError(f"template {template_name} hasn't been found")
+
+        self.__logger.debug(f'template moid: {template._GetMoId()}\t name: {template.name}')
+        self.__logger.debug(f'parent: {template.parent._GetMoId()}')
+        self.__logger.debug(f'datastore: {template.datastore[0].name}')
+        if template.snapshot:
+            self.__logger.debug(f'snapshot: {template.snapshot.currentSnapshot}')
+
+        machine_folder = self.vm_folders.create_folder(Settings.app['vsphere']['folder'])
+        default_snap_name = Settings.app['vsphere']['default_snapshot_name']
+
+        task = self.__get_clone_task(clone_approach, template, machine_name, machine_folder, default_snap_name)
+        vm = self.wait_for_task(task)
+        self.__logger.debug(f'{clone_approach} task finished with value: {vm}')
+
+        if vm and clone_approach is CloneApproach.INSTANT_CLONE:
+            # perform the restart of the network for instant clone
+            login_username = Settings.app.get('vms', {}).get('login_username', None)
+            login_password = Settings.app.get('vms', {}).get('login_password', None)
+
+            # check that we have login/password to VM available
+            if login_username is None or login_password is None:
+                raise RuntimeError(f'Cannot restart network after instant clone due to missing '
+                                   f'login_username/login_password in \'vms\' config section '
+                                   f'({login_username}/{login_password})')
+
+            exit_code = self.run_process_in_vm(machine_uuid=vm.config.uuid,
+                                               username=login_username,
+                                               password=login_password,
+                                               program_path='schtasks.exe',
+                                               program_arguments=r'/run /tn restartnet')
+
+            result = 'succeeded' if exit_code == 0 else 'failed'
+            self.__logger.debug(f'Resetting network in instant cloned VM {vm.config.uuid} {result}')
+
+        return vm
 
     def get_machine_by_uuid(self, machine_uuid):
         self.__logger.debug(f'-> get_machine_by_uuid({machine_uuid})')
@@ -307,43 +373,17 @@ class VCenter:
             )
         retry_deploy_count = Settings.app['vsphere']['retries']['deploy']
         retry_delete_count = Settings.app['vsphere']['retries']['delete']
+        clone_approach_str = Settings.app['vsphere'].get('clone_approach', 'linked_clone')
+        clone_approach = CloneApproach(clone_approach_str)
+
         vm = None
         vm_uuid = None
-        clone_approach = Settings.app['vsphere'].get('clone_approach', 'linked_clone')
 
         for i in range(retry_deploy_count):
             try:
-                template = self.__search_machine_by_name(template_name)
-                if not template:
-                    raise RuntimeError("template {} hasn't been found".format(template_name))
+                # clone VM based on specified approach
+                vm = self.clone_vm(template_name, machine_name, clone_approach)
 
-                self.__logger.debug('template moid: {}\t name: {}'.format(template._GetMoId(),
-                                                                          template.name))
-                self.__logger.debug('parent: {}'.format(template.parent._GetMoId()))
-                self.__logger.debug('datastore: {}'.format(template.datastore[0].name))
-                if template.snapshot:
-                    self.__logger.debug('snapshot: {}'.format(template.snapshot.currentSnapshot))
-
-                machine_folder= self.vm_folders.create_folder(Settings.app['vsphere']['folder'])
-
-                if clone_approach == 'linked_clone':
-                    task = self.__get_linked_clone_task(
-                        template,
-                        machine_name,
-                        machine_folder,
-                        Settings.app['vsphere']['default_snapshot_name']
-                    )
-                elif clone_approach == 'instant_clone':
-                    task = self.__get_instant_clone_task(
-                        template,
-                        machine_name,
-                        machine_folder
-                    )
-                else:
-                    raise RuntimeError("vsphere/clone_approach has invalid value of {}".format(clone_approach))
-
-                vm = self.wait_for_task(task)
-                self.__logger.debug('Task finished with value: {}'.format(vm))
                 if not vm:
                     # machine must be checked whether it has been created or not,
                     # in no-case machine creation must be re-executed
@@ -403,20 +443,9 @@ class VCenter:
                         )
                         self.__sleep_between_tries()
                         raise e
-                if clone_approach == 'instant_clone':
-                    # reset the network inside the VM
-                    self.__logger.debug(f'Resetting network in instant cloned VM {vm_uuid}')
-                    username = '' # TODO load from settings
-                    password = '' # TODO load from settings
-                    ec = self.run_process_in_vm(machine_uuid=vm_uuid,
-                                                username=username,
-                                                password=password,
-                                                program_path='schtasks.exe',
-                                                program_arguments='/run /tn restartnet')
-                    result = 'succeeded' if ec == 0 else 'failed'
-                    self.__logger.debug(f'Resetting network in instant cloned VM {vm_uuid} {result}')
 
                 return vm_uuid
+
         raise RuntimeError("virtual machine hasn't been deployed")
 
     def __has_sibling_objects(self, parent_folder, vm_uuid):

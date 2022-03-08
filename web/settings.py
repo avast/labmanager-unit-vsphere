@@ -43,6 +43,10 @@ class Settings:
                 #'clone_approach': 'linked_clone' # valid values: 'linked_clone', 'instant_clone'
                 'clone_approach': 'instant_clone'
             },
+            'vms': {
+                'login_username': None,
+                'login_password': None,
+            },
             'service': {
                 'listen': '127.0.0.1',
                 'port': 8000,
