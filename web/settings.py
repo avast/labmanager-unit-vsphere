@@ -40,8 +40,7 @@ class Settings:
                 },
                 'datacenter': None,
                 'root_system_folder': None,
-                #'clone_approach': 'linked_clone' # valid values: 'linked_clone', 'instant_clone'
-                'clone_approach': 'instant_clone'
+                'clone_approach': 'linked_clone' # valid values: 'linked_clone', 'instant_clone'
             },
             'vms': {
                 'login_username': None,
