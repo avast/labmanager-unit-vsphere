@@ -328,7 +328,7 @@ class VCenter:
 
         task = self.__get_clone_task(clone_approach, template, machine_name, machine_folder, default_snap_name)
         vm = self.wait_for_task(task)
-        self.__logger.debug(f'{clone_approach} task finished with value: {vm}')
+        self.__logger.debug(f'{clone_approach} task finished with result: {vm}')
 
         if vm and clone_approach is CloneApproach.INSTANT_CLONE:
             # perform the restart of the network for instant clone
@@ -362,7 +362,7 @@ class VCenter:
         self.__logger.debug(f'<- get_machine_by_uuid: {vm}')
         return vm
 
-    def deploy(self, template_name, machine_name, **kwargs):
+    def deploy(self, template_name, machine_name, running, **kwargs):
         self.__check_connection()
         destination_folder_name = Settings.app['vsphere']['folder']
         if 'inventory_folder' in kwargs and kwargs['inventory_folder'] is not None:
@@ -373,8 +373,10 @@ class VCenter:
             )
         retry_deploy_count = Settings.app['vsphere']['retries']['deploy']
         retry_delete_count = Settings.app['vsphere']['retries']['delete']
-        clone_approach_str = Settings.app['vsphere'].get('clone_approach', 'linked_clone')
-        clone_approach = CloneApproach(clone_approach_str)
+        inst_clone_enabled = Settings.app['vsphere']['instant_clone_enabled']
+
+        clone_approach = CloneApproach.INSTANT_CLONE if inst_clone_enabled and running else CloneApproach.LINKED_CLONE
+        self.__logger.debug(f'Using {clone_approach} (running={running}, instant_clone_enabled={inst_clone_enabled})')
 
         vm = None
         vm_uuid = None
@@ -912,10 +914,8 @@ class VCenter:
             time.sleep(0.5)
 
         result = task.info.result
-        self.__logger.debug('Task finished with status: {}, return value: {}'.format(
-            state,
-            result,
-        ))
+        error_msg = f', message: {task.info.error.msg}' if state == 'error' else ''
+        self.__logger.debug(f'Task finished with status: {state}{error_msg}, result: {result}')
 
         return result
 

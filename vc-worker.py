@@ -62,8 +62,12 @@ def process_deploy_action(conn, action, vc):
         else:
             output_machine_name = f'{template}-{request.machine}'
 
+        has_running_label = machine_ro.has_feat_running_label()
         try:
-            uuid = vc.deploy(template, output_machine_name, inventory_folder=inventory_folder)
+            uuid = vc.deploy(template,
+                             output_machine_name,
+                             running=has_running_label,
+                             inventory_folder=inventory_folder)
             if network_interface:
                 vc.config_network(uuid, interface_name=network_interface)
             machine_info = vc.get_machine_info(uuid)
@@ -83,7 +87,7 @@ def process_deploy_action(conn, action, vc):
         machine.machine_search_link = machine_info['machine_search_link']
         request.state = RequestState.SUCCESS
         request.save(conn=conn)
-        machine.state = MachineState.DEPLOYED
+        machine.state = MachineState.RUNNING if has_running_label is True else MachineState.DEPLOYED
         machine.save(conn=conn)
         logger.debug('updating action to be finished...')
         action.lock = -1
