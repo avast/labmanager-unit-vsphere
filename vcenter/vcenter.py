@@ -341,6 +341,7 @@ class VCenter:
                                    f'login_username/login_password in \'vms\' config section '
                                    f'({login_username}/{login_password})')
 
+            # restart network
             exit_code = self.run_process_in_vm(machine_uuid=vm.config.uuid,
                                                username=login_username,
                                                password=login_password,
@@ -349,6 +350,26 @@ class VCenter:
 
             result = 'succeeded' if exit_code == 0 else 'failed'
             self.__logger.debug(f'Resetting network in instant cloned VM {vm.config.uuid} {result}')
+
+            # stop Nos
+            exit_code = self.run_process_in_vm(machine_uuid=vm.config.uuid,
+                                               username=login_username,
+                                               password=login_password,
+                                               program_path='schtasks.exe',
+                                               program_arguments=r'/end /tn Nos')
+
+            result = 'succeeded' if exit_code == 0 else 'failed'
+            self.__logger.debug(f'Stopping NOS in instant cloned VM {vm.config.uuid} {result}')
+
+            # start Nos
+            exit_code = self.run_process_in_vm(machine_uuid=vm.config.uuid,
+                                               username=login_username,
+                                               password=login_password,
+                                               program_path='schtasks.exe',
+                                               program_arguments=r'/run /tn Nos')
+
+            result = 'succeeded' if exit_code == 0 else 'failed'
+            self.__logger.debug(f'Starting NOS in instant cloned VM {vm.config.uuid} {result}')
 
         return vm
 
