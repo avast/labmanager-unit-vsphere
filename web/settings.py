@@ -40,7 +40,27 @@ class Settings:
                 },
                 'datacenter': None,
                 'root_system_folder': None,
-                'instant_clone_enabled': False
+                'instant_clone_enabled': False,
+                'instant_clone_post_commands': [
+                    {
+                        'os': 'Win',
+                        'description': 'restart network',
+                        'command': 'schtasks.exe',
+                        'args': '/run /tn restartnet'
+                    },
+                    {
+                        'os': 'Win',
+                        'description': 'stop Nos',
+                        'command': 'schtasks.exe',
+                        'args': '/end /tn Nos'
+                    },
+                    {
+                        'os': 'Win',
+                        'description': 'start Nos',
+                        'command': 'schtasks.exe',
+                        'args': '/run /tn Nos'
+                    }
+                ]
             },
             'vms': {
                 'login_username': None,

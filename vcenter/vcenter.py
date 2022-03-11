@@ -335,41 +335,39 @@ class VCenter:
             login_username = Settings.app.get('vms', {}).get('login_username', None)
             login_password = Settings.app.get('vms', {}).get('login_password', None)
 
-            # check that we have login/password to VM available
-            if login_username is None or login_password is None:
-                raise RuntimeError(f'Cannot restart network after instant clone due to missing '
-                                   f'login_username/login_password in \'vms\' config section '
-                                   f'({login_username}/{login_password})')
+            post_install_clone_command_list = Settings.app['vsphere'].get('instant_clone_post_commands', [])
+            self.__logger.debug(f'Post instant clone commands in config: {len(post_install_clone_command_list)}')
 
-            # restart network
-            exit_code = self.run_process_in_vm(machine_uuid=vm.config.uuid,
-                                               username=login_username,
-                                               password=login_password,
-                                               program_path='schtasks.exe',
-                                               program_arguments=r'/run /tn restartnet')
+            for command_dict in post_install_clone_command_list:
+                os = command_dict.get('os', '')
+                description = command_dict.get('description', 'N/A')
+                command = command_dict.get('command')
+                args = command_dict.get('args', '')
+                username = command_dict.get('username', login_username)
+                password = command_dict.get('password', login_password)
 
-            result = 'succeeded' if exit_code == 0 else 'failed'
-            self.__logger.debug(f'Resetting network in instant cloned VM {vm.config.uuid} {result}')
+                # execute only if template matches os
+                if not template_name.startswith(os):
+                    self.__logger.debug(f'Skipping task with os={os} for {template_name}')
+                    continue
 
-            # stop Nos
-            exit_code = self.run_process_in_vm(machine_uuid=vm.config.uuid,
-                                               username=login_username,
-                                               password=login_password,
-                                               program_path='schtasks.exe',
-                                               program_arguments=r'/end /tn Nos')
+                # check if command and credentials are supplied
+                if not all([command, username, password]):
+                    pass_msg = '<empty>' if not password else '*' * len(password)
+                    self.__logger.warning(f'Incomplete task definition; command={command}, args={args}'
+                                          f'username={username}, password={pass_msg}, cannot run \'{description}\'!')
+                    continue
 
-            result = 'succeeded' if exit_code == 0 else 'failed'
-            self.__logger.debug(f'Stopping NOS in instant cloned VM {vm.config.uuid} {result}')
+                # run post instant clone commands
+                self.__logger.debug(f'Running \'{description}\' in VM {vm.config.uuid}')
+                exit_code = self.run_process_in_vm(machine_uuid=vm.config.uuid,
+                                                   username=username,
+                                                   password=password,
+                                                   program_path=command,
+                                                   program_arguments=args)
 
-            # start Nos
-            exit_code = self.run_process_in_vm(machine_uuid=vm.config.uuid,
-                                               username=login_username,
-                                               password=login_password,
-                                               program_path='schtasks.exe',
-                                               program_arguments=r'/run /tn Nos')
-
-            result = 'succeeded' if exit_code == 0 else 'failed'
-            self.__logger.debug(f'Starting NOS in instant cloned VM {vm.config.uuid} {result}')
+                result = 'succeeded' if exit_code == 0 else 'failed'
+                self.__logger.debug(f'\'{description}\' {result} in {vm.config.uuid}')
 
         return vm
 
