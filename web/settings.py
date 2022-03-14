@@ -50,15 +50,9 @@ class Settings:
                     },
                     {
                         'os': 'Win',
-                        'description': 'stop Nos',
-                        'command': 'schtasks.exe',
-                        'args': '/end /tn Nos'
-                    },
-                    {
-                        'os': 'Win',
-                        'description': 'start Nos',
-                        'command': 'schtasks.exe',
-                        'args': '/run /tn Nos'
+                        'description': 'notify NOS about restart of network',
+                        'command': 'cmd.exe',
+                        'args': '/c "type nul > /tmp/nos_expect_ip_change"'
                     }
                 ]
             },
