@@ -50,7 +50,7 @@ def process_deploy_action(conn, action, vc):
 
         template = get_template(machine_ro.labels)
 
-        if Settings.app['vsphere']['default_network_name']:
+        if Settings.app['vsphere']['default_network_name'] and Settings.app['vsphere']['force_default_network_name']:
             network_interface = Settings.app['vsphere']['default_network_name']
         else:
             network_interface = get_network_interface(machine_ro.labels)

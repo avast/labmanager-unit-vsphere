@@ -30,6 +30,7 @@ class Settings:
             'vsphere': {
                 'port': 443,
                 'default_network_name': None,
+                'force_default_network_name': True,
                 'retries': {
                     'deploy': 15,
                     'delete': 5,
