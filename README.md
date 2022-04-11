@@ -26,7 +26,7 @@ Contributors outside QA Automation team are required to discuss the contribution
                 CACHE 1;
             ALTER TABLE public.documents_id_seq OWNER TO postgres;
             CREATE TABLE public.documents (
-                id bigint DEFAULT nextval('public.documents_id_seq'::regclass) NOT NULL,
+                id bigint DEFAULT nextval('public.documents_id_seq'::regclass) NOT NULL primary key,
                 type character varying(128),
                 data json
             );
