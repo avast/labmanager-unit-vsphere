@@ -39,7 +39,7 @@ async def check_payload_deploy(request):
     # test if template is supported by unit
     for template_label in template_labels_list:
         if template_label not in supported_labels:
-            # do not validate label for templates that have 'skip_validation_for_suffix'
+            # do not validate templates with name ending with 'skip_validation_for_suffix' value
             if skip_validation_for_suffix and template_label.endswith(skip_validation_for_suffix):
                 logger.debug(f'Skipping template validation because it matches \'{skip_validation_for_suffix}\' suffix')
             else:
