@@ -33,11 +33,17 @@ async def check_payload_deploy(request):
     if len(template_labels_list) > 1:
         raise sanic.exceptions.InvalidUsage(f'label specification {labels} contains multiple \'template\' labels')
 
-    # test if template is supported by unit
     supported_labels = Settings.app['labels']
+    skip_validation_for_suffix = Settings.app['vsphere']['templates']['skip_validation_for_suffix']
+
+    # test if template is supported by unit
     for template_label in template_labels_list:
         if template_label not in supported_labels:
-            raise sanic.exceptions.InvalidUsage(f'\'{template_label}\' label is not supported by this unit')
+            # do not validate templates with name ending with 'skip_validation_for_suffix' value
+            if skip_validation_for_suffix and template_label.endswith(skip_validation_for_suffix):
+                logger.debug(f'Skipping template validation because it matches \'{skip_validation_for_suffix}\' suffix')
+            else:
+                raise sanic.exceptions.InvalidUsage(f'\'{template_label}\' label is not supported by this unit')
 
 
 @machines.middleware('request')

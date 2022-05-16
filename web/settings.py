@@ -16,7 +16,6 @@ class Settings:
             'labels': [],
             'slot_limit': 5,
             'nosid_prefix': None,
-
             'raven': {
                 'dsn': 'fake:dsn@fakehost.com/fake'
             },
@@ -31,6 +30,9 @@ class Settings:
                 'port': 443,
                 'default_network_name': None,
                 'force_default_network_name': True,
+                'templates': {
+                    'skip_validation_for_suffix': None,
+                },
                 'retries': {
                     'deploy': 15,
                     'delete': 5,
