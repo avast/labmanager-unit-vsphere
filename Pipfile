@@ -10,7 +10,7 @@ mamba       = "*"
 pycodestyle = "==2.4.0"
 
 [packages]
-sanic   = "==0.8.3"
+sanic   = "==20.12.6"
 aiohttp = "==3.7.4"
 pyvmomi = "==6.7.1.2018.12"
 pyYaml  = "==5.4"
