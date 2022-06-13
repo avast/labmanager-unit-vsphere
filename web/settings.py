@@ -47,12 +47,6 @@ class Settings:
                         'description': 'restart network',
                         'command': 'schtasks.exe',
                         'args': '/run /tn restartnet'
-                    },
-                    {
-                        'os': 'Win',
-                        'description': 'notify NOS about restart of network',
-                        'command': 'cmd.exe',
-                        'args': '/c "type nul > /tmp/nos_expect_ip_change"'
                     }
                 ]
             },
