@@ -278,9 +278,13 @@ class VCenter:
         :return: task
         """
         src_machine_state = source_machine.runtime.powerState
+        is_instant_clone_frozen = source_machine.runtime.instantCloneFrozen
         if src_machine_state != 'poweredOn':
             raise RuntimeError(f'Machine {repr(source_machine.name)} must be \'running\' to perform instant clone, '
                                f'but was {repr(src_machine_state)}')
+        if is_instant_clone_frozen is not True:
+            raise RuntimeError(f'Machine {repr(source_machine.name)} must be \'frozen\' to perform instant clone, '
+                               f'but \'instantCloneFrozen\' property was \'{(is_instant_clone_frozen)}\'')
         relocate_spec = vim.vm.RelocateSpec()
         relocate_spec.folder = destination_folder
         relocate_spec.pool = self.destination_resource_pool
