@@ -560,6 +560,45 @@ class VCenter:
 
         raise RuntimeError("virtual machine hasn't been released")
 
+    def freeze_vm(self, machine_uuid, timeout=5) -> bool:
+        self.__logger.debug(f'-> freeze_vm(\'{machine_uuid}\')')
+        self.__check_connection()
+        vm = self.get_machine_by_uuid(machine_uuid)
+        if not vm:
+            raise RuntimeError(f'Could not find VM for uuid {machine_uuid}')
+
+        is_frozen = vm.runtime.instantCloneFrozen
+        is_running = vm.runtime.powerState == 'poweredOn'
+        if not is_running:
+            raise RuntimeError(f'Machine {repr(vm.name)} must be running to perform instant clone freeze')
+        if is_frozen is True:
+            raise RuntimeError(f'Cannot freeze machine \'{vm.name}\', because it is already frozen!')
+
+        login_username = Settings.app.get('vms', {}).get('login_username', None)
+        login_password = Settings.app.get('vms', {}).get('login_password', None)
+
+        if not all([login_username, login_password]):
+            raise RuntimeError('Cannot freeze machine, username or password not provided!')
+
+        program_path = r'c:\Program Files\VMware\VMware Tools\vmtoolsd.exe'
+        program_args = '--cmd "instantclone.freeze"'
+        self.run_process_in_vm(machine_uuid=machine_uuid,
+                               username=login_username,
+                               password=login_password,
+                               program_path=program_path,
+                               program_arguments=program_args,
+                               run_async=True)
+        for i in range(timeout):
+            is_frozen = vm.runtime.instantCloneFrozen
+            self.__logger.debug(f'instantCloneFrozen: {is_frozen}')
+            if is_frozen is True:
+                break
+            self.__logger.debug('<> sleep(1)')
+            time.sleep(1)
+
+        self.__logger.debug(f'<- freeze(): {is_frozen}')
+        return is_frozen
+
     def start(self, machine_uuid):
         self.__check_connection()
 
@@ -831,7 +870,7 @@ class VCenter:
         finally:
             return result
 
-    def run_process_in_vm(self, machine_uuid, username, password, program_path, program_arguments='') -> int:
+    def run_process_in_vm(self, machine_uuid, username, password, program_path, program_arguments='', run_async=False) -> Optional[int]:
         """
         Runs process with args in VM under 'username', using VMWare tools
         :param machine_uuid: VM UUID specification
@@ -839,12 +878,13 @@ class VCenter:
         :param password: login password for 'username' in VM
         :param program_path: path to program
         :param program_arguments: optional, program arguments
-        :return: exit code of process
+        :param run_async: do not wait for process end
+        :return: exit code of process (if not running async)
 
         Note: Process stderr and stdout is not collected as it's not directly supported by VMWare tools
 
         """
-        self.__logger.debug(f'-> run_process_in_vm({machine_uuid}, {username}, ***, {program_path}, {program_arguments})')
+        self.__logger.debug(f'-> run_process_in_vm({machine_uuid}, {username}, ***, {program_path}, {program_arguments}, {run_async})')
         sleep_delta = 0.5
         vm = self.content.searchIndex.FindByUuid(None, machine_uuid, True)
         creds = vim.vm.guest.NamePasswordAuthentication(username=username, password=password)
@@ -852,16 +892,19 @@ class VCenter:
         process_manager = self.content.guestOperationsManager.processManager
         res = process_manager.StartProgramInGuest(vm, creds, program_spec)
         if res > 0:
-            while True:
+            result = None
+            while run_async is False:
                 process_info = process_manager.ListProcessesInGuest(vm, creds, [res]).pop()
                 pid_exitcode = process_info.exitCode
                 if isinstance(pid_exitcode, int):
                     self.__logger.debug(f'Process pid {process_info.pid} {process_info.cmdLine} finished;\n{process_info}')
-                    self.__logger.debug(f'<- run_process_in_vm(): {pid_exitcode}')
-                    return pid_exitcode
+                    result = pid_exitcode
+                    break
                 else:
                     self.__logger.debug(f'Process pid {process_info.pid} {process_info.cmdLine} still running; sleep({sleep_delta})')
                     time.sleep(sleep_delta)
+            self.__logger.debug(f'<- run_process_in_vm(): {repr(result)}')
+            return result
         else:
             raise RuntimeError(f"Could not start {program_spec.programPath} process!")
 
