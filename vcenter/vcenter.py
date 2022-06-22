@@ -560,7 +560,7 @@ class VCenter:
 
         raise RuntimeError("virtual machine hasn't been released")
 
-    def freeze_vm(self, machine_uuid, timeout=5) -> bool:
+    def freeze_vm(self, machine_uuid, timeout=15) -> bool:
         self.__logger.debug(f'-> freeze_vm(\'{machine_uuid}\')')
         self.__check_connection()
         vm = self.get_machine_by_uuid(machine_uuid)
