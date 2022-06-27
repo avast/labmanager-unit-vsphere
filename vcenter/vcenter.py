@@ -580,7 +580,7 @@ class VCenter:
         if not all([login_username, login_password]):
             raise RuntimeError('Cannot freeze machine, username or password not provided!')
 
-        program_path = r'c:\Program Files\VMware\VMware Tools\vmtoolsd.exe'
+        program_path = Settings.app.get('vms', {}).get('vmtoolsd_win_path')
         program_args = '--cmd "instantclone.freeze"'
         self.run_process_in_vm(machine_uuid=machine_uuid,
                                username=login_username,
