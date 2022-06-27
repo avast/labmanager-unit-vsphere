@@ -21,6 +21,10 @@ class CloneApproach(enum.Enum):
     INSTANT_CLONE = 'instant_clone'
 
 
+class MachineNotFrozenError(RuntimeError):
+    pass
+
+
 class VCenter:
 
     def __init__(self):
@@ -277,14 +281,11 @@ class VCenter:
         :param destination_folder: location of the machine
         :return: task
         """
-        src_machine_state = source_machine.runtime.powerState
-        is_instant_clone_frozen = source_machine.runtime.instantCloneFrozen
-        if src_machine_state != 'poweredOn':
-            raise RuntimeError(f'Machine {repr(source_machine.name)} must be \'running\' to perform instant clone, '
-                               f'but was {repr(src_machine_state)}')
-        if is_instant_clone_frozen is not True:
-            raise RuntimeError(f'Machine {repr(source_machine.name)} must be \'frozen\' to perform instant clone, '
-                               f'but \'instantCloneFrozen\' property was \'{(is_instant_clone_frozen)}\'')
+        pwr_state = source_machine.runtime.powerState
+        is_frozen = source_machine.runtime.instantCloneFrozen
+        if is_frozen is not True:
+            raise MachineNotFrozenError(f'Machine {repr(source_machine.name)} must be running & frozen to perform '
+                                        f'instant clone; powerState=\'{pwr_state}\', instantCloneFrozen={(is_frozen)}')
         relocate_spec = vim.vm.RelocateSpec()
         relocate_spec.folder = destination_folder
         relocate_spec.pool = self.destination_resource_pool
@@ -330,7 +331,15 @@ class VCenter:
         machine_folder = self.vm_folders.create_folder(Settings.app['vsphere']['folder'])
         default_snap_name = Settings.app['vsphere']['default_snapshot_name']
 
-        task = self.__get_clone_task(clone_approach, template, machine_name, machine_folder, default_snap_name)
+        try:
+            task = self.__get_clone_task(clone_approach, template, machine_name, machine_folder, default_snap_name)
+        except MachineNotFrozenError as mnfe:
+            # fallback from instant clone to linked clone
+            Settings.raven.captureException(exc_info=True)
+            clone_approach = CloneApproach.LINKED_CLONE
+            self.__logger.warning(f'Fallback from {CloneApproach.INSTANT_CLONE} to {clone_approach} due to {repr(mnfe)}')
+            task = self.__get_clone_task(clone_approach, template, machine_name, machine_folder, default_snap_name)
+
         vm = self.wait_for_task(task)
         self.__logger.debug(f'{clone_approach} task finished with result: {vm}')
 
