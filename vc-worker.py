@@ -87,7 +87,8 @@ def process_deploy_action(conn, action, vc):
         machine.machine_search_link = machine_info['machine_search_link']
         request.state = RequestState.SUCCESS
         request.save(conn=conn)
-        machine.state = MachineState.RUNNING if has_running_label is True else MachineState.DEPLOYED
+        is_machine_running = machine_info['power_state'] == 'poweredOn'
+        machine.state = MachineState.RUNNING if is_machine_running is True else MachineState.DEPLOYED
         machine.save(conn=conn)
         logger.debug('updating action to be finished...')
         action.lock = -1

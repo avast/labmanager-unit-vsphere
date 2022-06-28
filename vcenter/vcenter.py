@@ -937,6 +937,15 @@ class VCenter:
                 self.__logger.debug("obtaining machine name {} failed".format(machine_uuid), exc_info=True)
         return result
 
+    def _get_machine_power_state(self, vm, machine_uuid):
+        result = "unknown"
+        for i in range(Settings.app['vsphere']['retries']['default']):
+            try:
+                result = vm.runtime.powerState
+            except Exception:
+                self.__logger.debug("obtaining machine powerState {} failed".format(machine_uuid), exc_info=True)
+        return result
+
     def get_machine_info(self, machine_uuid):
         self.__check_connection()
         result = {'ip_addresses': [], 'nos_id': '', 'machine_search_link': ''}
@@ -951,6 +960,7 @@ class VCenter:
                 machine_name = self._get_machine_name(vm, machine_uuid)
                 result['machine_name'] = machine_name
 
+                result['power_state'] = self._get_machine_power_state(vm, machine_uuid)
                 host_name = Settings.app['vsphere']['host']
                 vsphere_address = 'https://{}/'.format(host_name)
 
