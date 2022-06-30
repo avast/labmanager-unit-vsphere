@@ -899,7 +899,13 @@ class VCenter:
         creds = vim.vm.guest.NamePasswordAuthentication(username=username, password=password)
         program_spec = vim.vm.guest.ProcessManager.ProgramSpec(programPath=program_path, arguments=program_arguments)
         process_manager = self.content.guestOperationsManager.processManager
-        res = process_manager.StartProgramInGuest(vm, creds, program_spec)
+        try:
+            res = process_manager.StartProgramInGuest(vm, creds, program_spec)
+        except Exception as e:
+            self.__logger.warning(f'Staring program \'{program_path}\' failed: {repr(e)}; will retry..')
+            time.sleep(1)
+            res = process_manager.StartProgramInGuest(vm, creds, program_spec)
+
         if res > 0:
             result = None
             while run_async is False:
