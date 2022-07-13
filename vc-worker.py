@@ -90,6 +90,9 @@ def process_deploy_action(conn, action, vc):
         is_machine_running = machine_info['power_state'] == 'poweredOn'
         machine.state = MachineState.RUNNING if is_machine_running is True else MachineState.DEPLOYED
         machine.save(conn=conn)
+        if is_machine_running:
+            logger.debug('enqueue get info request to obtain IPs for instant cloned machine...')
+            enqueue_get_info_request(machine, conn)
         logger.debug('updating action to be finished...')
         action.lock = -1
         action.save(conn=conn)
@@ -163,9 +166,9 @@ def action_get_info(request, machine_ro, vc, action, conn):
     action.save(conn=conn)
 
 
-def enqueue_get_info_request(request, machine, conn):
+def enqueue_get_info_request(machine, conn):
     # create another task to get info about that machine
-    logger.debug(f'creating another get_info action for {request.machine}')
+    logger.debug(f'creating another get_info action for {machine.id}')
     new_request = data.Request(type=RequestType.GET_INFO, machine=str(machine.id))
     new_request.save(conn=conn)
     machine.requests.append(new_request.id)
@@ -315,7 +318,7 @@ def process_other_actions(conn, action, vc):
         action.save(conn=conn)
 
         if request_type is RequestType.START:
-            enqueue_get_info_request(request, machine, conn)
+            enqueue_get_info_request(machine, conn)
 
     except Exception as e:
         Settings.raven.captureException(exc_info=True)
