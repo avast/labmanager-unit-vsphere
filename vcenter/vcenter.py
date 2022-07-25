@@ -589,14 +589,23 @@ class VCenter:
         if not all([login_username, login_password]):
             raise RuntimeError('Cannot freeze machine, username or password not provided!')
 
-        program_path = Settings.app.get('vms', {}).get('vmtoolsd_win_path')
-        program_args = '--cmd "instantclone.freeze"'
+        # first, register task for freezing
+        vmtoolsd_path = Settings.app.get('vms', {}).get('vmtoolsd_win_path')
+        run_freeze_min = f'cmd.exe /c start /MIN \'\' \'{vmtoolsd_path}\' --cmd instantclone.freeze'
         self.run_process_in_vm(machine_uuid=machine_uuid,
                                username=login_username,
                                password=login_password,
-                               program_path=program_path,
-                               program_arguments=program_args,
+                               program_path='schtasks.exe',
+                               program_arguments=f'/Create /TN freeze /TR "{run_freeze_min}" /SC ONEVENT /EC Application /MO *[System/EventID=777] /F /DELAY 0000:05',
+                               run_async=False)
+        # next, trigger the freezing task
+        self.run_process_in_vm(machine_uuid=machine_uuid,
+                               username=login_username,
+                               password=login_password,
+                               program_path='schtasks.exe',
+                               program_arguments='/run /TN freeze',
                                run_async=True)
+
         for i in range(timeout):
             is_frozen = vm.runtime.instantCloneFrozen
             self.__logger.debug(f'instantCloneFrozen: {is_frozen}')
