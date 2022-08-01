@@ -53,7 +53,6 @@ class Settings:
             'vms': {
                 'login_username': None,
                 'login_password': None,
-                'vmtoolsd_win_path':  r'c:\Program Files\VMware\VMware Tools\vmtoolsd.exe',
             },
             'service': {
                 'listen': '127.0.0.1',

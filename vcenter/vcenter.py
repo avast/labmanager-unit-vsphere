@@ -569,54 +569,6 @@ class VCenter:
 
         raise RuntimeError("virtual machine hasn't been released")
 
-    def freeze_vm(self, machine_uuid, timeout=15) -> bool:
-        self.__logger.debug(f'-> freeze_vm(\'{machine_uuid}\')')
-        self.__check_connection()
-        vm = self.get_machine_by_uuid(machine_uuid)
-        if not vm:
-            raise RuntimeError(f'Could not find VM for uuid {machine_uuid}')
-
-        is_frozen = vm.runtime.instantCloneFrozen
-        is_running = vm.runtime.powerState == 'poweredOn'
-        if not is_running:
-            raise RuntimeError(f'Machine {repr(vm.name)} must be running to perform instant clone freeze')
-        if is_frozen is True:
-            raise RuntimeError(f'Cannot freeze machine \'{vm.name}\', because it is already frozen!')
-
-        login_username = Settings.app.get('vms', {}).get('login_username', None)
-        login_password = Settings.app.get('vms', {}).get('login_password', None)
-
-        if not all([login_username, login_password]):
-            raise RuntimeError('Cannot freeze machine, username or password not provided!')
-
-        # first, register task for freezing
-        vmtoolsd_path = Settings.app.get('vms', {}).get('vmtoolsd_win_path')
-        run_freeze_min = f'cmd.exe /c start /MIN \'\' \'{vmtoolsd_path}\' --cmd instantclone.freeze'
-        self.run_process_in_vm(machine_uuid=machine_uuid,
-                               username=login_username,
-                               password=login_password,
-                               program_path='schtasks.exe',
-                               program_arguments=f'/Create /TN freeze /TR "{run_freeze_min}" /SC ONEVENT /EC Application /MO *[System/EventID=777] /F /DELAY 0000:05',
-                               run_async=False)
-        # next, trigger the freezing task
-        self.run_process_in_vm(machine_uuid=machine_uuid,
-                               username=login_username,
-                               password=login_password,
-                               program_path='schtasks.exe',
-                               program_arguments='/run /TN freeze',
-                               run_async=True)
-
-        for i in range(timeout):
-            is_frozen = vm.runtime.instantCloneFrozen
-            self.__logger.debug(f'instantCloneFrozen: {is_frozen}')
-            if is_frozen is True:
-                break
-            self.__logger.debug('<> sleep(1)')
-            time.sleep(1)
-
-        self.__logger.debug(f'<- freeze(): {is_frozen}')
-        return is_frozen
-
     def start(self, machine_uuid):
         self.__check_connection()
 
