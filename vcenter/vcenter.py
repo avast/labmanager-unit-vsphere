@@ -1,4 +1,5 @@
 import base64
+import enum
 import logging
 import re
 import random
@@ -8,11 +9,20 @@ import time
 import uuid
 import urllib.request
 
-from typing import Union
+from typing import Union, Optional
 
 from pyVim.connect import SmartConnect
 from pyVmomi import vim, vmodl
 from web.settings import Settings
+
+
+class CloneApproach(enum.Enum):
+    LINKED_CLONE = 'linked_clone'
+    INSTANT_CLONE = 'instant_clone'
+
+
+class MachineNotFrozenError(RuntimeError):
+    pass
 
 
 class VCenter:
@@ -263,6 +273,116 @@ class VCenter:
                     )
         return task
 
+    def __get_instant_clone_task(self, source_machine, destination_machine_name, destination_folder):
+        """
+        Creates task for performing an instant clone from existing source machine
+        :param source_machine: machine to base new machine on
+        :param destination_machine_name: name of newly created machine
+        :param destination_folder: location of the machine
+        :return: task
+        """
+        pwr_state = source_machine.runtime.powerState
+        is_frozen = source_machine.runtime.instantCloneFrozen
+        if is_frozen is not True:
+            raise MachineNotFrozenError(f'Machine {repr(source_machine.name)} must be running & frozen to perform '
+                                        f'instant clone; powerState=\'{pwr_state}\', instantCloneFrozen={(is_frozen)}')
+        relocate_spec = vim.vm.RelocateSpec()
+        relocate_spec.folder = destination_folder
+        relocate_spec.pool = self.destination_resource_pool
+        instant_clone_spec = vim.vm.InstantCloneSpec(name=destination_machine_name, location=relocate_spec)
+
+        return source_machine.InstantClone_Task(spec=instant_clone_spec)
+
+    def __get_clone_task(self,
+                         clone_approach: CloneApproach,
+                         template: vim.VirtualMachine,
+                         target_machine_name: str,
+                         machine_folder: str,
+                         default_snap_name: str):
+
+        if clone_approach is CloneApproach.LINKED_CLONE:
+            task = self.__get_linked_clone_task(template, target_machine_name, machine_folder, default_snap_name)
+
+        elif clone_approach is CloneApproach.INSTANT_CLONE:
+            task = self.__get_instant_clone_task(template, target_machine_name, machine_folder)
+        else:
+            raise ValueError(f'Invalid clone_approach value: {clone_approach}')
+
+        return task
+
+    def clone_vm(self, template_name: str, machine_name: str, clone_approach: CloneApproach) -> Optional[vim.VirtualMachine]:
+        """
+        Clones VM specified by template_name to target VM specified by machine_name
+        :param template_name: source machine name
+        :param machine_name:  target machine name
+        :param clone_approach: clone strategy (instant or linked)
+        :return: VM object if successful, else None
+        """
+        template = self.__search_machine_by_name(template_name)
+        if not template:
+            raise RuntimeError(f"template {template_name} hasn't been found")
+
+        self.__logger.debug(f'template moid: {template._GetMoId()}\t name: {template.name}')
+        self.__logger.debug(f'parent: {template.parent._GetMoId()}')
+        self.__logger.debug(f'datastore: {template.datastore[0].name}')
+        if template.snapshot:
+            self.__logger.debug(f'snapshot: {template.snapshot.currentSnapshot}')
+
+        machine_folder = self.vm_folders.create_folder(Settings.app['vsphere']['folder'])
+        default_snap_name = Settings.app['vsphere']['default_snapshot_name']
+
+        try:
+            task = self.__get_clone_task(clone_approach, template, machine_name, machine_folder, default_snap_name)
+        except MachineNotFrozenError as mnfe:
+            # fallback from instant clone to linked clone
+            Settings.raven.captureException(exc_info=True)
+            clone_approach = CloneApproach.LINKED_CLONE
+            self.__logger.warning(f'Fallback from {CloneApproach.INSTANT_CLONE} to {clone_approach} due to {repr(mnfe)}')
+            task = self.__get_clone_task(clone_approach, template, machine_name, machine_folder, default_snap_name)
+
+        vm = self.wait_for_task(task)
+        self.__logger.debug(f'{clone_approach} task finished with result: {vm}')
+
+        if vm and clone_approach is CloneApproach.INSTANT_CLONE:
+            # perform the restart of the network for instant clone
+            login_username = Settings.app.get('vms', {}).get('login_username', None)
+            login_password = Settings.app.get('vms', {}).get('login_password', None)
+
+            post_install_clone_command_list = Settings.app['vsphere'].get('instant_clone_post_commands', [])
+            self.__logger.debug(f'Post instant clone commands in config: {len(post_install_clone_command_list)}')
+
+            for command_dict in post_install_clone_command_list:
+                os = command_dict.get('os', '')
+                description = command_dict.get('description', 'N/A')
+                command = command_dict.get('command')
+                args = command_dict.get('args', '')
+                username = command_dict.get('username', login_username)
+                password = command_dict.get('password', login_password)
+
+                # execute only if template matches os
+                if not template_name.startswith(os):
+                    self.__logger.debug(f'Skipping task with os={os} for {template_name}')
+                    continue
+
+                # check if command and credentials are supplied
+                if not all([command, username, password]):
+                    pass_msg = '<empty>' if not password else '*' * len(password)
+                    self.__logger.warning(f'Incomplete task definition; command={command}, args={args}'
+                                          f'username={username}, password={pass_msg}, cannot run \'{description}\'!')
+                    continue
+
+                # run post instant clone commands
+                self.__logger.debug(f'Running \'{description}\' in VM {vm.config.uuid}')
+                exit_code = self.run_process_in_vm(machine_uuid=vm.config.uuid,
+                                                   username=username,
+                                                   password=password,
+                                                   program_path=command,
+                                                   program_arguments=args)
+
+                result = 'succeeded' if exit_code == 0 else 'failed'
+                self.__logger.debug(f'\'{description}\' {result} in {vm.config.uuid}')
+
+        return vm
 
     def get_machine_by_uuid(self, machine_uuid):
         self.__logger.debug(f'-> get_machine_by_uuid({machine_uuid})')
@@ -274,7 +394,7 @@ class VCenter:
         self.__logger.debug(f'<- get_machine_by_uuid: {vm}')
         return vm
 
-    def deploy(self, template_name, machine_name, **kwargs):
+    def deploy(self, template_name, machine_name, running, **kwargs):
         self.__check_connection()
         destination_folder_name = Settings.app['vsphere']['folder']
         if 'inventory_folder' in kwargs and kwargs['inventory_folder'] is not None:
@@ -285,32 +405,19 @@ class VCenter:
             )
         retry_deploy_count = Settings.app['vsphere']['retries']['deploy']
         retry_delete_count = Settings.app['vsphere']['retries']['delete']
+        inst_clone_enabled = Settings.app['vsphere']['instant_clone_enabled']
+
+        clone_approach = CloneApproach.INSTANT_CLONE if inst_clone_enabled and running else CloneApproach.LINKED_CLONE
+        self.__logger.debug(f'Using {clone_approach} (running={running}, instant_clone_enabled={inst_clone_enabled})')
+
         vm = None
         vm_uuid = None
+
         for i in range(retry_deploy_count):
             try:
-                template = self.__search_machine_by_name(template_name)
-                if not template:
-                    raise RuntimeError("template {} hasn't been found".format(template_name))
+                # clone VM based on specified approach
+                vm = self.clone_vm(template_name, machine_name, clone_approach)
 
-                self.__logger.debug('template moid: {}\t name: {}'.format(template._GetMoId(),
-                                                                          template.name))
-                self.__logger.debug('parent: {}'.format(template.parent._GetMoId()))
-                self.__logger.debug('datastore: {}'.format(template.datastore[0].name))
-                if template.snapshot:
-                    self.__logger.debug('snapshot: {}'.format(template.snapshot.currentSnapshot))
-
-                machine_folder = self.vm_folders.create_folder(Settings.app['vsphere']['folder'])
-
-                task = self.__get_linked_clone_task(
-                    template,
-                    machine_name,
-                    machine_folder,
-                    Settings.app['vsphere']['default_snapshot_name']
-                )
-
-                vm = self.wait_for_task(task)
-                self.__logger.debug('Task finished with value: {}'.format(vm))
                 if not vm:
                     # machine must be checked whether it has been created or not,
                     # in no-case machine creation must be re-executed
@@ -372,6 +479,7 @@ class VCenter:
                         raise e
 
                 return vm_uuid
+
         raise RuntimeError("virtual machine hasn't been deployed")
 
     def __has_sibling_objects(self, parent_folder, vm_uuid):
@@ -732,6 +840,50 @@ class VCenter:
         finally:
             return result
 
+    def run_process_in_vm(self, machine_uuid, username, password, program_path, program_arguments='', run_async=False) -> Optional[int]:
+        """
+        Runs process with args in VM under 'username', using VMWare tools
+        :param machine_uuid: VM UUID specification
+        :param username: login username of user in VM
+        :param password: login password for 'username' in VM
+        :param program_path: path to program
+        :param program_arguments: optional, program arguments
+        :param run_async: do not wait for process end
+        :return: exit code of process (if not running async)
+
+        Note: Process stderr and stdout is not collected as it's not directly supported by VMWare tools
+
+        """
+        self.__logger.debug(f'-> run_process_in_vm({machine_uuid}, {username}, ***, {program_path}, {program_arguments}, {run_async})')
+        sleep_delta = 0.5
+        vm = self.content.searchIndex.FindByUuid(None, machine_uuid, True)
+        creds = vim.vm.guest.NamePasswordAuthentication(username=username, password=password)
+        program_spec = vim.vm.guest.ProcessManager.ProgramSpec(programPath=program_path, arguments=program_arguments)
+        process_manager = self.content.guestOperationsManager.processManager
+        try:
+            res = process_manager.StartProgramInGuest(vm, creds, program_spec)
+        except Exception as e:
+            self.__logger.warning(f'Staring program \'{program_path}\' failed: {repr(e)}; will retry..')
+            time.sleep(1)
+            res = process_manager.StartProgramInGuest(vm, creds, program_spec)
+
+        if res > 0:
+            result = None
+            while run_async is False:
+                process_info = process_manager.ListProcessesInGuest(vm, creds, [res]).pop()
+                pid_exitcode = process_info.exitCode
+                if isinstance(pid_exitcode, int):
+                    self.__logger.debug(f'Process pid {process_info.pid} {process_info.cmdLine} finished;\n{process_info}')
+                    result = pid_exitcode
+                    break
+                else:
+                    self.__logger.debug(f'Process pid {process_info.pid} {process_info.cmdLine} still running; sleep({sleep_delta})')
+                    time.sleep(sleep_delta)
+            self.__logger.debug(f'<- run_process_in_vm(): {repr(result)}')
+            return result
+        else:
+            raise RuntimeError(f"Could not start {program_spec.programPath} process!")
+
     def _get_machine_ips(self, vm, machine_uuid):
         result = []
         try:
@@ -752,6 +904,15 @@ class VCenter:
                 self.__logger.debug("obtaining machine name {} failed".format(machine_uuid), exc_info=True)
         return result
 
+    def _get_machine_power_state(self, vm, machine_uuid):
+        result = "unknown"
+        for i in range(Settings.app['vsphere']['retries']['default']):
+            try:
+                result = vm.runtime.powerState
+            except Exception:
+                self.__logger.debug("obtaining machine powerState {} failed".format(machine_uuid), exc_info=True)
+        return result
+
     def get_machine_info(self, machine_uuid):
         self.__check_connection()
         result = {'ip_addresses': [], 'nos_id': '', 'machine_search_link': ''}
@@ -766,6 +927,7 @@ class VCenter:
                 machine_name = self._get_machine_name(vm, machine_uuid)
                 result['machine_name'] = machine_name
 
+                result['power_state'] = self._get_machine_power_state(vm, machine_uuid)
                 host_name = Settings.app['vsphere']['host']
                 vsphere_address = 'https://{}/'.format(host_name)
 
@@ -804,10 +966,8 @@ class VCenter:
             time.sleep(0.5)
 
         result = task.info.result
-        self.__logger.debug('Task finished with status: {}, return value: {}'.format(
-            state,
-            result,
-        ))
+        error_msg = f', message: {task.info.error.msg}' if state == 'error' else ''
+        self.__logger.debug(f'Task finished with status: {state}{error_msg}, result: {result}')
 
         return result
 

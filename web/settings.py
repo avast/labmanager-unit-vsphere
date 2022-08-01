@@ -43,6 +43,19 @@ class Settings:
                 },
                 'datacenter': None,
                 'root_system_folder': None,
+                'instant_clone_enabled': False,
+                'instant_clone_post_commands': [
+                    {
+                        'os': 'Win',
+                        'description': 'restart network',
+                        'command': 'schtasks.exe',
+                        'args': '/run /tn restartnet'
+                    }
+                ]
+            },
+            'vms': {
+                'login_username': None,
+                'login_password': None,
             },
             'service': {
                 'listen': '127.0.0.1',

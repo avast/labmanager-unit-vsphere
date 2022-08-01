@@ -35,3 +35,6 @@ class Machine(Document):
                     'snapshots': [],
                     'owner': '<not_def>',
                 }
+
+    def has_feat_running_label(self) -> bool:
+        return 'feat:running' in self.labels
