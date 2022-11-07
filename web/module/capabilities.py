@@ -31,7 +31,6 @@ class Capabilities:
             with data.Connection.use() as conn:
                 used_slots = \
                     len(data.Machine.get({'state': MachineState.RUNNING.value}, conn=conn)) + \
-                    round(len(data.Machine.get({'state': MachineState.STOPPED.value}, conn=conn))/2) + \
                     len(data.Machine.get({'state': MachineState.DEPLOYED.value}, conn=conn)) + \
                     len(data.Machine.get({'state': MachineState.CREATED.value}, conn=conn))
             Capabilities._last_check = int(time.time())
