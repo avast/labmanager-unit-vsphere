@@ -13,6 +13,7 @@ import vcenter.vcenter as vcenter
 import web.modeltr as data
 from web.modeltr.enums import MachineState, RequestState, RequestType
 from web.settings import Settings
+from web.stats import stats_increment_metric_worker as stats_increment_metric
 
 logger = logging.getLogger(__name__)
 
@@ -47,6 +48,7 @@ def process_deploy_action(conn, action, vc):
         request = data.Request.get_one_for_update({'_id': action.request}, conn=conn)
         machine_ro = data.Machine.get_one({'_id': request.machine}, conn=conn)
         logger.info(f'{os.getpid()}-{action.id}->deploy|machine.state: {machine_ro.state}')
+        stats_increment_metric('deploy-request')
 
         template = get_template(machine_ro.labels)
 
@@ -96,7 +98,9 @@ def process_deploy_action(conn, action, vc):
         logger.debug('updating action to be finished...')
         action.lock = -1
         action.save(conn=conn)
+        stats_increment_metric('deploy-ok')
     except Exception:
+        stats_increment_metric('deploy-failed')
         Settings.raven.captureException(exc_info=True)
         logger.error('action_deploy exception: ', exc_info=True)
 
@@ -114,6 +118,7 @@ def process_deploy_action(conn, action, vc):
 
 def action_undeploy(request, machine, vc):
     try:
+        stats_increment_metric('undeploy-request')
         vc.stop(machine.provider_id)
         vc.undeploy(machine.provider_id)
     except Exception:
@@ -122,22 +127,26 @@ def action_undeploy(request, machine, vc):
 
 
 def action_start(request, machine, vc):
+    stats_increment_metric('start-request')
     vc.start(machine.provider_id)
     return MachineState.RUNNING
 
 
 def action_stop(request, machine, vc):
+    stats_increment_metric('stop-request')
     vc.stop(machine.provider_id)
     return MachineState.STOPPED
 
 
 def action_reset(request, machine, vc):
+    stats_increment_metric('restart-request')
     vc.reset(machine.provider_id)
     return None
 
 
 def action_get_info(request, machine_ro, vc, action, conn):
     logger.debug(request.to_dict())
+    stats_increment_metric('getinfo-request')
     try:
         info = vc.get_machine_info(machine_ro.provider_id)
         logger.debug(info)
@@ -183,6 +192,7 @@ def enqueue_get_info_request(machine, conn):
 
 
 def action_take_screenshot(request, machine, vc, conn):
+    stats_increment_metric('takess-request')
     ss_destination = Settings.app['service']['screenshot_store']
     if ss_destination not in ['db', 'hcp']:
         logger.warning(f'wrong configuration for screenshot_store: {ss_destination}')
@@ -209,6 +219,7 @@ def action_take_screenshot(request, machine, vc, conn):
 
 def action_take_snapshot(request, machine, vc, conn):
     if request.subject_id:
+        stats_increment_metric('snaptake-request')
         snap_ro = data.Snapshot.get_one({'_id': request.subject_id}, conn=conn)
         result = vc.take_snapshot(machine_uuid=machine.provider_id, snapshot_name=snap_ro.get_uniq_name())
         snap = data.Snapshot.get_one_for_update({'_id': request.subject_id}, conn=conn)
@@ -228,6 +239,7 @@ def action_take_snapshot(request, machine, vc, conn):
 # TODO deduplicate with 'action_take_snapshot()' later
 def action_restore_snapshot(request, machine, vc, conn):
     if request.subject_id:
+        stats_increment_metric('snaprestore-request')
         snap_ro = data.Snapshot.get_one({'_id': request.subject_id}, conn=conn)
         result = vc.revert_snapshot(machine_uuid=machine.provider_id, snapshot_name=snap_ro.get_uniq_name())
         snap = data.Snapshot.get_one_for_update({'_id': request.subject_id}, conn=conn)
@@ -242,6 +254,7 @@ def action_restore_snapshot(request, machine, vc, conn):
 # TODO deduplicate with 'action_take_snapshot()' later
 def action_delete_snapshot(request, machine, vc, conn):
     if request.subject_id:
+        stats_increment_metric('snapdelete-request')
         snap_ro = data.Snapshot.get_one({'_id': request.subject_id}, conn=conn)
         result = vc.remove_snapshot(machine_uuid=machine.provider_id, snapshot_name=snap_ro.get_uniq_name())
         snap = data.Snapshot.get_one_for_update({'_id': request.subject_id}, conn=conn)
