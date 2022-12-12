@@ -5,7 +5,7 @@ from collections import Iterable
 import raven
 import yaml
 from deepmerge import Merger as dm
-
+import statsd
 
 class Settings:
     app = {
@@ -87,6 +87,11 @@ class Settings:
                 'loop_initial_sleep': 0.5,
                 'loop_idle_sleep': 1.5,
                 'load_refresh_interval': 5  # in number of deployed machines
+            },
+            'statsd': {
+                'host': 'foo.bar.com',
+                'port': 0,
+                'prefix': None
             }
           }
 
@@ -100,6 +105,8 @@ class Settings:
     __config = yaml.safe_load(open(__config_file, 'r').read())
 
     raven = None
+
+    statsd_client = None
 
     @staticmethod
     def __flatten(items):
@@ -125,6 +132,11 @@ class Settings:
             dsn=Settings.app['raven']['dsn'],
             ignore_exceptions=[KeyboardInterrupt]
         )
+        if Settings.app['statsd']['prefix']:
+            Settings.statsd_client = statsd.StatsClient(
+                Settings.app['statsd']['host'],
+                Settings.app['statsd']['port']
+            )
 
 
 Settings.configure()
