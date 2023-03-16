@@ -14,6 +14,7 @@ import web.modeltr as data
 from web.modeltr.enums import MachineState, RequestState, RequestType
 from web.settings import Settings
 from web.stats import stats_increment_metric_worker as stats_increment_metric
+from web.stats import stats_add_timing_metric_worker as stats_add_timing_metric
 
 logger = logging.getLogger(__name__)
 
@@ -173,6 +174,10 @@ def action_get_info(request, machine_ro, vc, action, conn):
         action.lock = 1
     request.save(conn=conn)
     action.save(conn=conn)
+    if len(info['ip_addresses']) == 0:
+        approx_duration_seconds = (Settings.app['worker']["getinfo_default_repetition_count"] - action.repetitions)*11
+        stats_add_timing_metric("getinfo-approxduration",  approx_duration_seconds)
+        logger.debug(f'TIMING FIRED {approx_duration_seconds}')
 
 
 def enqueue_get_info_request(machine, conn):
@@ -185,7 +190,7 @@ def enqueue_get_info_request(machine, conn):
     data.Action(
             type='other',
             request=new_request.id,
-            repetitions=20,
+            repetitions=Settings.app['worker']["getinfo_default_repetition_count"],
             delay=10,
             next_try=datetime.datetime.now() + datetime.timedelta(seconds=5)
     ).save(conn=conn)
