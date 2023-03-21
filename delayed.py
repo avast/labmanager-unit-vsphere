@@ -28,7 +28,7 @@ if __name__ == '__main__':
     process_actions = True
     while process_actions:
         with data.Connection.use('conn2') as conn:
-            time.sleep(1.5)
+            time.sleep(Settings.app['delayed']['sleep'])
             try:
                 now = datetime.datetime.now()
                 action = data.Action.get_one_for_update_skip_locked({'lock': 1}, conn=conn)

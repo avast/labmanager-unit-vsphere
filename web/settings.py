@@ -86,12 +86,16 @@ class Settings:
                 'idle_counter': 60,
                 'loop_initial_sleep': 0.5,
                 'loop_idle_sleep': 1.5,
-                'load_refresh_interval': 5  # in number of deployed machines
+                'load_refresh_interval': 5,  # in number of deployed machines
+                'getinfo_default_repetition_count': 20,
             },
             'statsd': {
                 'host': 'foo.bar.com',
                 'port': 0,
                 'prefix': None
+            },
+            'delayed': {
+                'sleep': 1.5,
             }
           }
 
@@ -133,10 +137,17 @@ class Settings:
             ignore_exceptions=[KeyboardInterrupt]
         )
         if Settings.app['statsd']['prefix']:
-            Settings.statsd_client = statsd.StatsClient(
-                Settings.app['statsd']['host'],
-                Settings.app['statsd']['port']
-            )
+            try:
+                Settings.statsd_client = statsd.StatsClient(
+                    Settings.app['statsd']['host'],
+                    Settings.app['statsd']['port']
+                )
+            except Exception as ex:
+                logging.getLogger("settings").warning(
+                    "Statsd client initialization failed, no stats gonna be sent",
+                    exc_info=True
+                )
+                Settings.statsd_client = None
 
 
 Settings.configure()
