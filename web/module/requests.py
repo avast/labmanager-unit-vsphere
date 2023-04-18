@@ -38,7 +38,8 @@ async def req_get_info(request, req_id):
                 'is_last': req.state.has_finished()
             }]
 
-        if req.type is data.RequestType.DEPLOY:
+        if req.type is data.RequestType.DEPLOY \
+            and Settings.app['service'].get('detailed_deploy_response', True):
             await Capabilities.fetch(forced=True)
             extra_result = [{
                                'result': {

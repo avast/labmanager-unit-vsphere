@@ -69,6 +69,7 @@ class Settings:
                     'caching_enabled_threshold': 90,  # in percent
                 },
                 'screenshot_store': 'db',  # hcp eventually
+                'detailed_deploy_response': True,     # if true capabilities state is added to deploy responses
             },
             'hcp': {
                 'url': None,
