@@ -18,6 +18,25 @@ def signal_handler(signum, frame):
     process_actions = False
 
 
+def test(conn):
+    import uuid
+    logger.debug("started >-----")
+    host_info = data.HostRuntimeInfo(created_at=datetime.datetime.now(), maintenance=True)
+    host_info.info = { "foo": f"{uuid.uuid1()}" }
+    host_info.info2 = [ { "foo": f"{uuid.uuid1()}" }, { "foo2": f"{uuid.uuid1()}" }]
+    host_info.save(conn=conn)
+    logger.debug("finished <-----")
+    pass
+
+def test_read(conn):
+    logger.debug("started >-----")
+    docs = data.HostRuntimeInfo.get({}, conn=conn)
+    for doc in docs:
+        logger.debug(f"{doc.to_dict()}")
+    logger.debug("finished <-----")
+    pass
+
+
 if __name__ == '__main__':
 
     data.Connection.connect('conn2', dsn=Settings.app['db']['dsn'])
@@ -28,6 +47,8 @@ if __name__ == '__main__':
     process_actions = True
     while process_actions:
         with data.Connection.use('conn2') as conn:
+            test(conn)
+            test_read(conn)
             time.sleep(Settings.app['delayed']['sleep'])
             try:
                 now = datetime.datetime.now()

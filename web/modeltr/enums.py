@@ -57,3 +57,16 @@ class RequestType(StrEnumBase):
 
     def can_change_machine_state(self) -> bool:
         return self in [RequestType.START, RequestType.STOP, RequestType.DEPLOY, RequestType.UNDEPLOY]
+
+
+class HostStandbyMode(StrEnumBase):
+    ENTERING = 'entering'
+    EXITING = 'exiting'
+    IN = 'in'
+    NONE = 'none'
+
+
+class HostConnectionState(StrEnumBase):
+    CONNECTED = 'connected'
+    DISCONNECTED = 'disconnected'
+    NOTRESPONDING = 'notResponding'
