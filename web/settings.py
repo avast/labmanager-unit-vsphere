@@ -51,7 +51,9 @@ class Settings:
                         'command': 'schtasks.exe',
                         'args': '/run /tn restartnet'
                     }
-                ]
+                ],
+                'timeout': 20,
+                'hosts_folder_name': None,
             },
             'vms': {
                 'login_username': None,

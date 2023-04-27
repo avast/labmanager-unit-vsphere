@@ -41,7 +41,7 @@ class VCenter:
         if not result:
             self.connect()
 
-    def connect(self):
+    def connect(self, quick=False):
         context = ssl._create_unverified_context()
 
         si = SmartConnect(
@@ -61,9 +61,10 @@ class VCenter:
         self.content = si.content
         self._connection_cookie = si._stub.cookie
         self._connected = True
-        self.vm_folders = VCenter.VmFolders(self)
-        self.refresh_destination_datastore()
-        self.refresh_destination_resource_pool()
+        if not quick:
+            self.vm_folders = VCenter.VmFolders(self)
+            self.refresh_destination_datastore()
+            self.refresh_destination_resource_pool()
 
     def idle(self):
         self.__check_connection()
@@ -970,6 +971,16 @@ class VCenter:
         self.__logger.debug(f'Task finished with status: {state}{error_msg}, result: {result}')
 
         return result
+
+    def get_hosts_in_folder(self, folder_name):
+        result = self.__get_objects_list_from_container(self.content.rootFolder, vim.Folder)
+        hosts_folder = None
+        for folder in result:
+            if folder.name == folder_name:
+                hosts_folder = folder
+                break
+        return self.__get_objects_list_from_container(hosts_folder, vim.HostSystem)
+
 
     class VmFolders:
 
