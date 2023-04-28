@@ -7,3 +7,4 @@ from .action import *
 from .screenshot import *
 from .snapshot import Snapshot
 from .host_runtime_info import HostRuntimeInfo
+from .deploy_ticket import DeployTicket

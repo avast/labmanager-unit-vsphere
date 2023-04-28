@@ -19,24 +19,6 @@ def signal_handler(signum, frame):
     process_actions = False
 
 
-#def test(conn):
-#    import uuid
-#    logger.debug("started >-----")
-#    host_info = data.HostRuntimeInfo(created_at=datetime.datetime.now(), maintenance=True)
-#    host_info.info = { "foo": f"{uuid.uuid1()}" }
-#    host_info.info2 = [ { "foo": f"{uuid.uuid1()}" }, { "foo2": f"{uuid.uuid1()}" }]
-#    host_info.save(conn=conn)
-#    logger.debug("finished <-----")
-#    pass
-
-#def test_read(conn):
-#    logger.debug("started >-----")
-#    docs = data.HostRuntimeInfo.get({}, conn=conn)
-#    for doc in docs:
-#        logger.debug(f"{doc.to_dict()}")
-#    logger.debug("finished <-----")
-#    pass
-
 def host_info_obtainer(conn, vc):
     if Settings.app["vsphere"]["hosts_folder_name"]:
         hosts = vc.get_hosts_in_folder(Settings.app["vsphere"]["hosts_folder_name"])
@@ -77,6 +59,7 @@ def host_info_obtainer(conn, vc):
                 new_host_info.created_at = datetime.datetime.now()
                 new_host_info.save(conn=conn)
 
+
 if __name__ == '__main__':
 
     data.Connection.connect('conn2', dsn=Settings.app['db']['dsn'])
@@ -92,8 +75,6 @@ if __name__ == '__main__':
     while process_actions:
         with data.Connection.use('conn2') as conn:
             host_info_obtainer(conn, vc)
-            #test_read(conn)
-            time.sleep(Settings.app['delayed']['sleep'])
             try:
                 now = datetime.datetime.now()
                 action = data.Action.get_one_for_update_skip_locked({'lock': 1}, conn=conn)
@@ -124,5 +105,7 @@ if __name__ == '__main__':
             except Exception:
                 Settings.raven.captureException(exc_info=True)
                 logger.error('Exception while processing request: ', exc_info=True)
+
+        time.sleep(Settings.app['delayed']['sleep'])
 
     logger.debug("Delayed finished")

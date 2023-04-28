@@ -79,7 +79,7 @@ class Document:
             raise ValueError('conn not specified while saving some Document')
 
         if self.__document_updated_property:
-            self.__logger.debug(f'setting document updated at property for {type(self).__name__.lower()} {self.id}')
+            # self.__logger.debug(f'setting document updated at property for {type(self).__name__.lower()} {self.id}')
             setattr(self, self.__document_updated_property, datetime.datetime.now())
 
         if self.id == trId._default:
@@ -98,14 +98,14 @@ class Document:
         raise RuntimeError()
 
     def __save(self, **kwargs):
-        self.__logger.debug(f'saving {type(self).__name__.lower()} {self.id}')
+        # self.__logger.debug(f'saving {type(self).__name__.lower()} {self.id}')
         connection = self.__get_connection(**kwargs)
 
         cur = connection.get_cursor()
-        self.__logger.debug(self.to_dict(redacted=True, show_hidden=True))
+        # self.__logger.debug(self.to_dict(redacted=True, show_hidden=True))
         cur.execute(
-                    "update documents set data= %s where id = %s",
-                    [json.dumps(self.to_dict(show_hidden=True)), self.id]
+            "update documents set data= %s where id = %s",
+            [json.dumps(self.to_dict(show_hidden=True)), self.id]
         )
         connection.wait_for_completion()
 
@@ -115,8 +115,8 @@ class Document:
         cur = connection.get_cursor()
         self.__logger.debug(self.to_dict(show_hidden=True))
         cur.execute(
-                    "insert into documents (type, data) VALUES(%s,%s) returning id;",
-                    [type(self).__name__.lower(), json.dumps(self.to_dict(show_hidden=True))]
+            "insert into documents (type, data) VALUES(%s,%s) returning id;",
+            [type(self).__name__.lower(), json.dumps(self.to_dict(show_hidden=True))]
         )
         connection.wait_for_completion()
         returning_id = cur.fetchone()[0]
@@ -170,9 +170,9 @@ class Document:
                 except ValueError:
                     cv = datetime.datetime.min
                 setattr(
-                        new_document,
-                        prop,
-                        cv
+                    new_document,
+                    prop,
+                    cv
                 )
             # convert strEnums back to instances
             elif issubclass(target_type, StrEnumBase):
@@ -255,9 +255,9 @@ class Document:
     def get_one_for_update_skip_locked(cls, query, **kwargs):
         try:
             return cls.__get_one_custom(
-                            query,
-                            "ORDER BY ID LIMIT 1 FOR UPDATE SKIP LOCKED;",
-                            **kwargs
+                query,
+                "ORDER BY ID LIMIT 1 FOR UPDATE SKIP LOCKED;",
+                **kwargs
             )
         except psycopg2.OperationalError as e:
             logger = logging.getLogger(__name__)
@@ -272,7 +272,7 @@ class Document:
         raise ValueError('lock field cannot be found')
 
     @classmethod
-    def get_eldest_excl(cls, query,  **kwargs):
+    def get_eldest_excl(cls, query, **kwargs):
         if 'conn' not in kwargs:
             raise ValueError('parameter conn must be specified')
         connection = kwargs['conn']
@@ -299,3 +299,20 @@ class Document:
         doc.save(conn=connection)
 
         return doc
+
+    @classmethod
+    def delete(cls, query, **kwargs):
+        if 'conn' not in kwargs:
+            raise ValueError('parameter conn must be specified')
+        connection = kwargs['conn']
+
+        if not isinstance(query, type({})):
+            raise ValueError('query must be a dictionary')
+
+        if "_id" not in query:
+            raise ValueError('there must be _id in query')
+
+        cur = connection.get_cursor()
+        cur.execute("DELETE FROM documents where type=%s and id=%s", [cls.__name__.lower(), str(query["_id"])])
+
+        connection.wait_for_completion()
