@@ -66,7 +66,11 @@ def fix_imbalance(conn):
     fake_id = None
     for ticket in tickets:
         if ticket.host_moref == "FAKE":
-            fake_id = ticket.id
+            if fake_id == None:
+                fake_id = ticket.id
+            else:
+                if int(fake_id)< int(ticket.id):
+                    fake_id = ticket.id
 
     # there are only active tickets
     actual_tickets = list(filter(lambda ticket: int(ticket.id) > int(fake_id), tickets))
@@ -93,11 +97,11 @@ def fix_imbalance(conn):
                  ticket.save(conn=qc)
     else:
         # contiguously enable up to vm_per_host on enabled hosts
-        start_ticket_id = None
+        start_ticket_id = fake_id
         # create fake ticket that separates old ones and new ones
-        with data.Connection.use('quick') as qc:
-            fake_tickets = data.DeployTicket.get({"host_moref": "FAKE"}, conn=qc)
-            start_ticket_id = fake_tickets[-1].id
+        #with data.Connection.use('quick') as qc:
+        #    fake_tickets = data.DeployTicket.get({"host_moref": "FAKE"}, conn=qc)
+        #    start_ticket_id = fake_tickets[-1].id
 
         # get all new tickets that are not enabled
         data_from_db = []
@@ -111,7 +115,7 @@ def fix_imbalance(conn):
             #count running ones
             with data.Connection.use('conn2') as conn:
                 running[host.mo_ref] = len(data.DeployTicket.get({"host_moref": host.mo_ref, "taken": 1}, conn=conn))
-            #count new enabled
+            #count newly enabled
             with data.Connection.use('conn2') as conn:
                 running[host.mo_ref] += len(list(filter(lambda ticket: int(ticket.id) > int(start_ticket_id), data.DeployTicket.get({"host_moref": host.mo_ref, 'enabled': 'true'}, conn=conn))))
         print(running)

@@ -19,6 +19,62 @@ from web.stats import stats_add_timing_metric_worker as stats_add_timing_metric
 logger = logging.getLogger(__name__)
 
 
+def acquire_deploy_ticket():
+    result = {}
+    if Settings.app["vsphere"]["hosts_folder_name"]:
+        ticket = None
+        ticket_id = -1
+        ticket_hostmmoref = ''
+        start_ticket_obtaining = time.time()
+        with data.Connection.use('qconn') as conn:
+            while ticket is None:
+                query = {'taken': 0, 'enabled': 'true'}
+                ticket = data.DeployTicket.get_one_for_update_skip_locked(query, conn=conn)
+                time.sleep(0.4)
+            ticket.taken = 1
+            ticket_id = ticket.id
+            ticket_hostmmoref = ticket.host_moref
+            ticket.save(conn=conn)
+        ticket_obtaining_time = time.time() - start_ticket_obtaining
+        result["host_moref"] = ticket_hostmmoref
+        result["id"] = ticket_id
+        logger.debug(f"Deploy ticket obtained in {ticket_obtaining_time} seconds")
+    return result
+
+
+def alter_deploy_ticket(ticket, vm_moref):
+    if Settings.app["vsphere"]["hosts_folder_name"]:
+        with data.Connection.use('qconn') as conn:
+            ticket = data.DeployTicket.get_one_for_update({"_id": ticket["id"]}, conn=conn)
+            ticket.assigned_vm_moref = vm_moref
+            ticket.save(conn=conn)
+
+
+def release_deploy_ticket(vm_moref):
+    if Settings.app["vsphere"]["hosts_folder_name"]:
+        if vm_moref == '':
+            logger.info("problem with deploy ticket releasing.... some machine may be stucked")
+            return
+        with data.Connection.use('qconn') as conn:
+            ticket = data.DeployTicket.get_one({"assigned_vm_moref": vm_moref}, conn=conn)
+            if(ticket):
+                ticket = data.DeployTicket.get_one_for_update({"assigned_vm_moref": vm_moref}, conn=conn)
+                ticket.assigned_vm_moref = ''
+                ticket.taken = 0
+                ticket.save(conn=conn)
+
+def release_deploy_ticket_id(id):
+    if Settings.app["vsphere"]["hosts_folder_name"]:
+        with data.Connection.use('qconn') as conn:
+            ticket = data.DeployTicket.get_one({"_id": id}, conn=conn)
+            if(ticket):
+                ticket.assigned_vm_moref = ''
+                ticket.taken = 0
+                ticket.save(conn=conn)
+            else:
+                logger.warning("Db error when handling release_deploy_ticket_id")
+
+
 def get_template(labels):
     for l in labels:
         matches = re.match('template:(.*)', l)
@@ -66,11 +122,23 @@ def process_deploy_action(conn, action, vc):
             output_machine_name = f'{template}-{request.machine}'
 
         has_running_label = machine_ro.has_feat_running_label()
+
         try:
-            uuid = vc.deploy(template,
-                             output_machine_name,
-                             running=has_running_label,
-                             inventory_folder=inventory_folder)
+            uuid = ''
+            if Settings.app["vsphere"]["hosts_folder_name"]:
+                ticket = acquire_deploy_ticket()
+                try:
+                    machine = vc.deploy_via_ticket(template, output_machine_name, ticket)
+                    alter_deploy_ticket(ticket, machine["mo_ref"])
+                    uuid = machine["uuid"]
+                except:
+                    logger.warning(f"An error occurred when trying to deploy {template} as {output_machine_name}")
+                    release_deploy_ticket_id(ticket['id'])
+            else:
+                uuid = vc.deploy(template,
+                                 output_machine_name,
+                                 running=has_running_label,
+                                 inventory_folder=inventory_folder)
             if network_interface:
                 vc.config_network(uuid, interface_name=network_interface)
             machine_info = vc.get_machine_info(uuid)
@@ -78,9 +146,11 @@ def process_deploy_action(conn, action, vc):
             Settings.raven.captureException(exc_info=True)
             logger.info('Exception deploying machine: ', exc_info=True)
             raise e
+
         if not machine_info['nos_id']:
             vc.stop(uuid)
             vc.undeploy(uuid)
+            release_deploy_ticket(machine_info['mo_ref'])
             raise RuntimeError(f"NOS ID hasn't been returned for machine {uuid}")
 
         machine = data.Machine.get_one_for_update({'_id': request.machine}, conn=conn)
@@ -120,8 +190,10 @@ def process_deploy_action(conn, action, vc):
 def action_undeploy(request, machine, vc):
     try:
         stats_increment_metric('undeploy-request')
+        machine_info = vc.get_machine_info(machine.provider_id)
         vc.stop(machine.provider_id)
         vc.undeploy(machine.provider_id)
+        release_deploy_ticket(machine_info["mo_ref"])
     except Exception:
         return MachineState.FAILED
     return MachineState.UNDEPLOYED
@@ -360,6 +432,8 @@ if __name__ == '__main__':
     else:
         mode = 'other'
     data.Connection.connect('conn1', dsn=Settings.app['db']['dsn'])
+    if Settings.app["vsphere"]["hosts_folder_name"]:
+        data.Connection.connect('qconn', dsn=Settings.app['db']['dsn'])
     vc = vcenter.VCenter()
     vc.connect()
 

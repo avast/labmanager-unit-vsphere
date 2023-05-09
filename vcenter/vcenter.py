@@ -60,6 +60,7 @@ class VCenter:
 
         self.content = si.content
         self._connection_cookie = si._stub.cookie
+        self.si_stub = si._stub # to be used for rapid managed object creation
         self._connected = True
         if not quick:
             self.vm_folders = VCenter.VmFolders(self)
@@ -482,6 +483,69 @@ class VCenter:
                 return vm_uuid
 
         raise RuntimeError("virtual machine hasn't been deployed")
+
+    # noinspection PyProtectedMember
+    def deploy_via_ticket(self, template_name, machine_name, deploy_ticket): # returns a dict with uuid && mo_ref
+        # search for HostSystem
+        host = vim.HostSystem(deploy_ticket['host_moref'], stub=self.si_stub)
+
+        # search for template
+        if Settings.app['vsphere']['hosts_shared_templates']:
+            template = self.__search_machine_by_name(template_name)
+        else:
+            vms = self.__get_objects_list_from_container(host, vim.VirtualMachine)
+            template = None
+            for vm in vms:
+                if vm.name == template_name:
+                    template = vm
+                    break
+
+        # clone a template
+        default_snap_name = Settings.app['vsphere']['default_snapshot_name']
+        destination_machine_folder = self.vm_folders.create_folder(Settings.app['vsphere']['folder'])
+
+        snap = self.search_for_snapshot(template, default_snap_name)
+
+        picked_dest_ds = host.datastore[0]
+        rps = self.__get_objects_list_from_container(self.content.rootFolder, vim.ResourcePool)
+
+        # search for main resource pool that is associated with each ComputeResource
+        # (this ComputeResource has the same name as host System)
+        f_rps = list(filter(lambda rp: rp.name == 'Resources' and rp.parent.name == host.name, rps))
+        if len(f_rps) < 1:
+            raise f"cannot deploy the machine {template_name} as {machine_name} on {host.name}, " \
+                  f"no resource pool the machine may be placed to found"
+
+        relocate_spec = vim.vm.RelocateSpec(
+            datastore=picked_dest_ds,
+            diskMoveType='createNewChildDiskBacking',
+            host=host,pool=f_rps[0],
+            transform=vim.vm.RelocateSpec.Transformation.sparse
+        )
+        spec = vim.vm.CloneSpec(
+            location=relocate_spec,
+            powerOn=False,
+            snapshot=snap,
+            template=False,
+
+        )
+        vm = None
+        for i in range(Settings.app['vsphere']['retries']['deploy']):
+            task = template.CloneVM_Task(
+                destination_machine_folder,
+                machine_name,
+                spec
+            )
+            vm = self.wait_for_task(task)
+            if vm: break
+            self.__sleep_between_tries()
+
+        self.__logger.debug(f'deploy_via_ticket finished with result: {vm}')
+        if vm:
+            return {"uuid": vm.config.uuid, "mo_ref": vm._moId}
+        else:
+            raise f"cannot deploy the machine {template_name} as {machine_name} " \
+                  f"on {host.name}"
 
     def __has_sibling_objects(self, parent_folder, vm_uuid):
         self.__logger.debug('are there sibling machines in: {}({})?'.format(
@@ -916,7 +980,7 @@ class VCenter:
 
     def get_machine_info(self, machine_uuid):
         self.__check_connection()
-        result = {'ip_addresses': [], 'nos_id': '', 'machine_search_link': ''}
+        result = {'ip_addresses': [], 'nos_id': '', 'machine_search_link': '', 'mo_ref': ''}
 
         vm = self.content.searchIndex.FindByUuid(None, machine_uuid, True)
         try:
@@ -938,6 +1002,8 @@ class VCenter:
                     machine_name,
                     '&searchType=simple'
                     )
+
+                result['mo_ref'] = vm._moId
 
                 self.__logger.debug('get machine info end')
         except Exception:

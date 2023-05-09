@@ -54,6 +54,7 @@ class Settings:
                 ],
                 'timeout': 20,
                 'hosts_folder_name': None,
+                'hosts_shared_templates': True,
             },
             'vms': {
                 'login_username': None,

@@ -19,28 +19,43 @@ def signal_handler(signum, frame):
     process_actions = False
 
 
+def safe_array_map(input_array, func):
+    result = []
+    try:
+        for item in input_array:
+            try:
+                result.append(func(item))
+            except Exception as iex:
+                logger.warning(f"safe_array_map failed due to: {iex}")
+    except Exception:
+        return []
+    finally:
+        return result
+
+
+# noinspection PyProtectedMember
 def host_info_obtainer(conn, vc):
     if Settings.app["vsphere"]["hosts_folder_name"]:
         hosts = vc.get_hosts_in_folder(Settings.app["vsphere"]["hosts_folder_name"])
-        info = list(map(lambda host: {
+        info = safe_array_map(hosts, lambda host: {
             "name": host.name,
             "mo_ref": host._moId,
             'maintenance': host.runtime.inMaintenanceMode,
-            'vms_count':len(host.vm),
-            'vms_running_count': len(list(filter(lambda vm: vm.runtime.powerState == 'poweredOn', host.vm))),
+            'vms_count': len(host.vm),
+            'vms_running_count': len(safe_array_map(host.vm, lambda vm: vm.runtime.powerState == 'poweredOn')),
             'connection_state': str(host.runtime.connectionState),
             'standby_mode': host.runtime.standbyMode,
-            'local_templates': list(map(lambda vm: {
-                "name": vm.name,
-                "mo_ref": vm._moId
-            },host.vm)),
-            'local_datastores': list(map(lambda ds: {
+            'local_templates': safe_array_map(host.vm, lambda vm: {
+               "name": vm.name,
+               "mo_ref": vm._moId
+            }),
+            'local_datastores': safe_array_map(host.datastore, lambda ds: {
                 "name": ds.info.name,
                 "mo_ref": ds._moId,
                 "maintenance": not ds.summary.maintenanceMode == 'normal',
-                "freeSpaceGB": ds.info.freeSpace/1024/1024/1024
-            },host.datastore))
-        }, hosts))
+                "freeSpaceGB": ds.info.freeSpace / 1024 / 1024 / 1024
+            })
+        })
         for item in info:
             host_info = data.HostRuntimeInfo.get_one_for_update(
                 {'name': item['name']},
@@ -55,7 +70,7 @@ def host_info_obtainer(conn, vc):
                 host_info.local_datastores = item['local_datastores']
                 host_info.save(conn=conn)
             else:
-                new_host_info = data.HostRuntimeInfo( **item)
+                new_host_info = data.HostRuntimeInfo(**item)
                 new_host_info.created_at = datetime.datetime.now()
                 new_host_info.save(conn=conn)
 
