@@ -511,10 +511,10 @@ class VCenter:
 
         # search for main resource pool that is associated with each ComputeResource
         # (this ComputeResource has the same name as host System)
-        f_rps = list(filter(lambda rp: rp.name == 'Resources' and rp.parent.name == host.name, rps))
+        f_rps = [rp for rp in rps if rp.name == 'Resources' and rp.parent.name == host.name]
         if len(f_rps) < 1:
-            raise f"cannot deploy the machine {template_name} as {machine_name} on {host.name}, " \
-                  f"no resource pool the machine may be placed to found"
+            raise RuntimeError(f"cannot deploy the machine {template_name} as {machine_name} on {host.name}, " +
+                  f"no resource pool the machine may be placed to found")
 
         relocate_spec = vim.vm.RelocateSpec(
             datastore=picked_dest_ds,
@@ -537,15 +537,15 @@ class VCenter:
                 spec
             )
             vm = self.wait_for_task(task)
-            if vm: break
+            if vm:
+                break
             self.__sleep_between_tries()
 
         self.__logger.debug(f'deploy_via_ticket finished with result: {vm}')
         if vm:
             return {"uuid": vm.config.uuid, "mo_ref": vm._moId}
         else:
-            raise f"cannot deploy the machine {template_name} as {machine_name} " \
-                  f"on {host.name}"
+            raise RuntimeError(f"cannot deploy the machine {template_name} as {machine_name} on {host.name}")
 
     def __has_sibling_objects(self, parent_folder, vm_uuid):
         self.__logger.debug('are there sibling machines in: {}({})?'.format(
@@ -648,6 +648,7 @@ class VCenter:
 
     def stop(self, machine_uuid):
         self.__check_connection()
+        failed_attempts = 0
         for i in range(Settings.app['vsphere']['retries']['config_network']):
             try:
                 vm = self.content.searchIndex.FindByUuid(None, machine_uuid, True)
@@ -656,12 +657,21 @@ class VCenter:
                     task = vm.PowerOffVM_Task()
                     self.wait_for_task(task)
                     self.__logger.debug('vm powered off')
-                    return
+                    return True
                 else:
+                    failed_attempts += 1
                     raise Exception('machine {} not found'.format(machine_uuid))
             except Exception:
-                Settings.raven.captureException(exc_info=True)
+                # Settings.raven.captureException(exc_info=True)
                 self.__sleep_between_tries()
+
+        if failed_attempts > 0:
+            try:
+                raise Exception('machine {} not found (occurred {} times)'.format(machine_uuid, failed_attempts))
+            except Exception:
+                Settings.raven.captureException(exc_info=True)
+
+        return False
 
     def reset(self, machine_uuid):
         self.__check_connection()

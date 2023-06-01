@@ -6,7 +6,7 @@ from .enums import StrEnumBase
 import datetime
 import inspect
 import logging
-
+from web.settings import Settings
 
 class DocumentList(list):
 
@@ -211,7 +211,7 @@ class Document:
         cur = connection.get_cursor()
         cur.execute(sql_query[0], sql_query[1])
         connection.wait_for_completion()
-        if cur.rowcount == 0:
+        if cur.rowcount == 0 and Settings.app['document_abstraction']['warn_0_records']:
             logger = logging.getLogger(__name__)
             logger.debug(f'0 records returned from: >>{cur.query}<<')
         for item in cur.fetchall():

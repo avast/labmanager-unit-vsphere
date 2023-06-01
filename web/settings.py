@@ -99,6 +99,12 @@ class Settings:
             },
             'delayed': {
                 'sleep': 1.5,
+            },
+            'ticketeer': {
+                'sleep': 6,
+            },
+            'document_abstraction':{
+                'warn_0_records': True,
             }
           }
 

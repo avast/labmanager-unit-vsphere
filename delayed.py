@@ -19,7 +19,7 @@ def signal_handler(signum, frame):
     process_actions = False
 
 
-def safe_array_map(input_array, func):
+def _safe_array_map(input_array, func):
     result = []
     try:
         for item in input_array:
@@ -29,27 +29,27 @@ def safe_array_map(input_array, func):
                 logger.warning(f"safe_array_map failed due to: {iex}")
     except Exception:
         return []
-    finally:
-        return result
+    return result
 
 
 # noinspection PyProtectedMember
 def host_info_obtainer(conn, vc):
     if Settings.app["vsphere"]["hosts_folder_name"]:
+        start_host_info_obtainer = time.time()
         hosts = vc.get_hosts_in_folder(Settings.app["vsphere"]["hosts_folder_name"])
-        info = safe_array_map(hosts, lambda host: {
+        info = _safe_array_map(hosts, lambda host: {
             "name": host.name,
             "mo_ref": host._moId,
             'maintenance': host.runtime.inMaintenanceMode,
             'vms_count': len(host.vm),
-            'vms_running_count': len(safe_array_map(host.vm, lambda vm: vm.runtime.powerState == 'poweredOn')),
+            'vms_running_count': len(_safe_array_map(host.vm, lambda vm: vm.runtime.powerState == 'poweredOn')),
             'connection_state': str(host.runtime.connectionState),
             'standby_mode': host.runtime.standbyMode,
-            'local_templates': safe_array_map(host.vm, lambda vm: {
+            'local_templates': _safe_array_map(host.vm, lambda vm: {
                "name": vm.name,
                "mo_ref": vm._moId
             }),
-            'local_datastores': safe_array_map(host.datastore, lambda ds: {
+            'local_datastores': _safe_array_map(host.datastore, lambda ds: {
                 "name": ds.info.name,
                 "mo_ref": ds._moId,
                 "maintenance": not ds.summary.maintenanceMode == 'normal',
@@ -73,6 +73,8 @@ def host_info_obtainer(conn, vc):
                 new_host_info = data.HostRuntimeInfo(**item)
                 new_host_info.created_at = datetime.datetime.now()
                 new_host_info.save(conn=conn)
+        logger.info(f"host_info_obtainer finished successfully " +
+                    f"in: {time.time() - start_host_info_obtainer}")
 
 
 if __name__ == '__main__':
