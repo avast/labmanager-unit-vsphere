@@ -18,6 +18,7 @@ class HostRuntimeInfo(Document):
     standby_mode = trString         # entering, exiting, in, none
     local_templates = trList
     local_datastores = trList
+    associated_resource_pool = trString
 
     _defaults = {
         'created_at': trTimestamp.NOT_INITIALIZED,

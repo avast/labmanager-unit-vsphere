@@ -54,6 +54,7 @@ class Settings:
                 ],
                 'timeout': 20,
                 'hosts_folder_name': None,
+                'hosts_shared_templates': True,
             },
             'vms': {
                 'login_username': None,
@@ -98,6 +99,12 @@ class Settings:
             },
             'delayed': {
                 'sleep': 1.5,
+            },
+            'ticketeer': {
+                'sleep': 6,
+            },
+            'document_abstraction':{
+                'warn_0_records': True,
             }
           }
 

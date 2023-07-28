@@ -19,46 +19,43 @@ def signal_handler(signum, frame):
     process_actions = False
 
 
-#def test(conn):
-#    import uuid
-#    logger.debug("started >-----")
-#    host_info = data.HostRuntimeInfo(created_at=datetime.datetime.now(), maintenance=True)
-#    host_info.info = { "foo": f"{uuid.uuid1()}" }
-#    host_info.info2 = [ { "foo": f"{uuid.uuid1()}" }, { "foo2": f"{uuid.uuid1()}" }]
-#    host_info.save(conn=conn)
-#    logger.debug("finished <-----")
-#    pass
+def _safe_array_map(input_array, func):
+    result = []
+    try:
+        for item in input_array:
+            try:
+                result.append(func(item))
+            except Exception as iex:
+                logger.warning(f"safe_array_map failed due to: {iex}")
+    except Exception:
+        return []
+    return result
 
-#def test_read(conn):
-#    logger.debug("started >-----")
-#    docs = data.HostRuntimeInfo.get({}, conn=conn)
-#    for doc in docs:
-#        logger.debug(f"{doc.to_dict()}")
-#    logger.debug("finished <-----")
-#    pass
 
+# noinspection PyProtectedMember
 def host_info_obtainer(conn, vc):
     if Settings.app["vsphere"]["hosts_folder_name"]:
+        start_host_info_obtainer = time.time()
         hosts = vc.get_hosts_in_folder(Settings.app["vsphere"]["hosts_folder_name"])
-        info = list(map(lambda host: {
+        info = _safe_array_map(hosts, lambda host: {
             "name": host.name,
             "mo_ref": host._moId,
             'maintenance': host.runtime.inMaintenanceMode,
-            'vms_count':len(host.vm),
-            'vms_running_count': len(list(filter(lambda vm: vm.runtime.powerState == 'poweredOn', host.vm))),
+            'vms_count': len(host.vm),
+            'vms_running_count': len(_safe_array_map(host.vm, lambda vm: vm.runtime.powerState == 'poweredOn')),
             'connection_state': str(host.runtime.connectionState),
             'standby_mode': host.runtime.standbyMode,
-            'local_templates': list(map(lambda vm: {
-                "name": vm.name,
-                "mo_ref": vm._moId
-            },host.vm)),
-            'local_datastores': list(map(lambda ds: {
+            'local_templates': _safe_array_map(host.vm, lambda vm: {
+               "name": vm.name,
+               "mo_ref": vm._moId
+            }),
+            'local_datastores': _safe_array_map(host.datastore, lambda ds: {
                 "name": ds.info.name,
                 "mo_ref": ds._moId,
                 "maintenance": not ds.summary.maintenanceMode == 'normal',
-                "freeSpaceGB": ds.info.freeSpace/1024/1024/1024
-            },host.datastore))
-        }, hosts))
+                "freeSpaceGB": ds.info.freeSpace / 1024 / 1024 / 1024
+            })
+        })
         for item in info:
             host_info = data.HostRuntimeInfo.get_one_for_update(
                 {'name': item['name']},
@@ -73,9 +70,12 @@ def host_info_obtainer(conn, vc):
                 host_info.local_datastores = item['local_datastores']
                 host_info.save(conn=conn)
             else:
-                new_host_info = data.HostRuntimeInfo( **item)
+                new_host_info = data.HostRuntimeInfo(**item)
                 new_host_info.created_at = datetime.datetime.now()
                 new_host_info.save(conn=conn)
+        logger.info(f"host_info_obtainer finished successfully " +
+                    f"in: {time.time() - start_host_info_obtainer}")
+
 
 if __name__ == '__main__':
 
@@ -92,8 +92,6 @@ if __name__ == '__main__':
     while process_actions:
         with data.Connection.use('conn2') as conn:
             host_info_obtainer(conn, vc)
-            #test_read(conn)
-            time.sleep(Settings.app['delayed']['sleep'])
             try:
                 now = datetime.datetime.now()
                 action = data.Action.get_one_for_update_skip_locked({'lock': 1}, conn=conn)
@@ -124,5 +122,7 @@ if __name__ == '__main__':
             except Exception:
                 Settings.raven.captureException(exc_info=True)
                 logger.error('Exception while processing request: ', exc_info=True)
+
+        time.sleep(Settings.app['delayed']['sleep'])
 
     logger.debug("Delayed finished")
