@@ -140,6 +140,73 @@ def get_all_new_tickets(separator_ticket_id):
         data_from_db = data.DeployTicket.get({"enabled": 'false'}, conn=conn)
     return list(filter(lambda ticket: int(ticket.id) > int(separator_ticket_id), data_from_db))
 
+
+class Ticketeer:
+
+    def __init__(self, conn=None):
+        self.slot_limit = Settings.app["slot_limit"]
+        self.hosts = data.HostRuntimeInfo.get({}, conn=conn)
+
+        # maintenance field represents actual state of the host
+        # to_be_in_maintenance is set by the unit to signal that the host will be in maintenance soon
+        # and the task putting into maintenance is running and hopefully will be finished soon
+        ready_hosts = data.HostRuntimeInfo.get({"maintenance": "false"}, conn=conn)
+        self.ready_hosts = list(filter(lambda host: host.to_be_in_maintenance == False, ready_hosts))
+
+        self.vm_per_host = int(self.slot_limit / len(self.hosts))
+        real_slot_limit = self.vm_per_host * len(ready_hosts)
+
+        # get morefs of all hosts
+        self.hosts_morefs = list(map(lambda host: host.mo_ref, self.hosts))
+
+        # get morefs of ready hosts
+        self.ready_hosts_morefs = list(map(lambda host: host.mo_ref, ready_hosts))
+
+        # disable all hosts that are in maintenance
+        disable_tickets_in_maintenance(list(set(self.hosts_morefs) - set(self.ready_hosts_morefs)))
+
+        self.tickets = data.DeployTicket.get({}, conn=conn)
+        # first search for the last SEPARATOR
+        self.fake_id = get_last_separator_ticket_id(self.tickets)
+
+        # there are only active tickets
+        self.actual_tickets = [] if self.fake_id is None else \
+            list(filter(lambda ticket: int(ticket.id) > int(self.fake_id), self.tickets))
+
+    def should_tickets_be_reshuffled(self):
+        len(self.actual_tickets) != self.vm_per_host * len(self.hosts)
+
+    def re_shuffle(self):
+        logger.info("ticket imbalance detected...")
+
+        # create a fake ticket that separates old ones and new ones
+        start_ticket_id = create_new_separator_ticket()
+
+        # gets all old ticket ids
+        old_tickets = data.DeployTicket.get({"enabled": "true"}, conn=conn)
+        old_tickets_ids = list(map(lambda ticket: ticket.id,
+                                   filter(lambda ticket: int(ticket.id) < int(start_ticket_id), old_tickets)))
+
+        # create new tickets, every one in disabled state
+        generate_tickets_in_correct_order(self.hosts_morefs, self.vm_per_host)
+
+        disable_tickets(old_tickets_ids)
+
+
+    def finish_re_shuffling(self):
+        start_ticket_id = self.fake_id
+
+        # get all new tickets that are not enabled
+        new_tickets = get_all_new_tickets(start_ticket_id)
+
+        ticket_statistics_dict = get_current_ticket_statistics(self.ready_hosts, start_ticket_id)
+
+        ensure_correct_count_of_new_tickets_is_enabled(new_tickets, self.vm_per_host, ticket_statistics_dict)
+
+    def cleanup(self):
+        cleanup_old_tickets_if_too_many(self.fake_id, self.tickets)
+
+
 def ticketeer(conn):
     slot_limit = Settings.app["slot_limit"]
     hosts = data.HostRuntimeInfo.get({}, conn=conn)
@@ -218,7 +285,13 @@ if __name__ == '__main__':
         with data.Connection.use('conn2') as conn:
             try:
                 logger.info(f"proceeding {revolution}....\n")
-                ticketeer(conn)
+                #ticketeer(conn)
+                ticketeer = Ticketeer(conn=conn)
+                if ticketeer.should_tickets_be_reshuffled():
+                    ticketeer.re_shuffle()
+                else:
+                    ticketeer.finish_re_shuffling()
+                ticketeer.cleanup()
 
             except Exception:
                 Settings.raven.captureException(exc_info=True)
