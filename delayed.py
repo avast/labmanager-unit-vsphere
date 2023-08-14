@@ -32,6 +32,41 @@ def _safe_array_map(input_array, func):
     return result
 
 
+def save_to_db(info, conn):
+    for item in info:
+        host_info = data.HostRuntimeInfo.get_one_for_update(
+            {'name': item['name']},
+            conn=conn)
+        if host_info:
+            host_info.maintenance = item['maintenance']
+            host_info.vms_count = item['vms_count']
+            host_info.vms_running_count = item['vms_running_count']
+            host_info.connection_state = item['connection_state']
+            host_info.standby_mode = item['standby_mode']
+            host_info.local_templates = item['local_templates']
+            host_info.local_datastores = item['local_datastores']
+            host_info.save(conn=conn)
+        else:
+            new_host_info = data.HostRuntimeInfo(**item)
+            new_host_info.created_at = datetime.datetime.now()
+            new_host_info.save(conn=conn)
+
+
+def delete_unwanted_documents(info, conn):
+    host_names = [item["name"] for item in info]
+    hosts_to_be_deleted = []
+    ids_to_be_deleted = []
+    for hostinfo in data.HostRuntimeInfo.get({}, conn=conn):
+        if hostinfo.name not in host_names:
+            hosts_to_be_deleted.append(hostinfo.name)
+    for host_name in hosts_to_be_deleted:
+        host = data.HostRuntimeInfo.get({'name': host_name}, conn=conn)
+        ids_to_be_deleted.append(host[0].id)
+    for host_id in ids_to_be_deleted:
+        data.HostRuntimeInfo.delete({'_id': host_id}, conn=conn)
+        logger.debug(f'host: {host_id} deleted from database')
+
+
 # noinspection PyProtectedMember
 def host_info_obtainer(conn, vc):
     if Settings.app["vsphere"]["hosts_folder_name"]:
@@ -56,25 +91,14 @@ def host_info_obtainer(conn, vc):
                 "freeSpaceGB": ds.info.freeSpace / 1024 / 1024 / 1024
             })
         })
-        for item in info:
-            host_info = data.HostRuntimeInfo.get_one_for_update(
-                {'name': item['name']},
-                conn=conn)
-            if host_info:
-                host_info.maintenance = item['maintenance']
-                host_info.vms_count = item['vms_count']
-                host_info.vms_running_count = item['vms_running_count']
-                host_info.connection_state = item['connection_state']
-                host_info.standby_mode = item['standby_mode']
-                host_info.local_templates = item['local_templates']
-                host_info.local_datastores = item['local_datastores']
-                host_info.save(conn=conn)
-            else:
-                new_host_info = data.HostRuntimeInfo(**item)
-                new_host_info.created_at = datetime.datetime.now()
-                new_host_info.save(conn=conn)
-        logger.info(f"host_info_obtainer finished successfully " +
-                    f"in: {time.time() - start_host_info_obtainer}")
+
+        save_to_db(info, conn)
+
+        # hosts that are currently not present in vmware folder must be deleted from db as well
+        delete_unwanted_documents(info, conn)
+
+        logger.info(f'host_info_obtainer finished successfully ' +
+                    f'in: {time.time() - start_host_info_obtainer}')
 
 
 if __name__ == '__main__':
@@ -90,8 +114,15 @@ if __name__ == '__main__':
 
     process_actions = True
     while process_actions:
+
         with data.Connection.use('conn2') as conn:
-            host_info_obtainer(conn, vc)
+            try:
+                host_info_obtainer(conn, vc)
+            except Exception:
+                Settings.raven.captureException(exc_info=True)
+                logger.error('Could not obtain host information: ', exc_info=True)
+
+        with data.Connection.use('conn2') as conn:
             try:
                 now = datetime.datetime.now()
                 action = data.Action.get_one_for_update_skip_locked({'lock': 1}, conn=conn)
