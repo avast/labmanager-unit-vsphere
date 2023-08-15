@@ -29,7 +29,15 @@ class Capabilities:
             logger.debug("Real capabilities fetch from db in progress...")
             with data.Connection.use() as conn:
                 if Settings.app["vsphere"]["hosts_folder_name"]:
-                    Capabilities._free_slots = len(data.DeployTicket.get({'taken': 0, 'enabled': 'true'}, conn=conn))
+                    ready_hosts1 = data.HostRuntimeInfo.get({"maintenance": "false"}, conn=conn)
+                    ready_hosts = [host for host in ready_hosts1 if host.to_be_in_maintenance is False]
+                    vm_per_host = int(Settings.app["slot_limit"] / len(data.HostRuntimeInfo.get({}, conn=conn)))
+                    Capabilities._slot_limit = vm_per_host * len(ready_hosts)
+                    Capabilities._free_slots = min(
+                        len(data.DeployTicket.get({'taken': 0, 'enabled': 'true'}, conn=conn)),
+                        Capabilities._slot_limit
+                    )
+
                 else:
                     used_slots = \
                         len(data.Machine.get({'state': MachineState.RUNNING.value}, conn=conn)) + \
