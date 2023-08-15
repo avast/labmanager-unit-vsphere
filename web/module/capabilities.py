@@ -27,14 +27,16 @@ class Capabilities:
            used_slots > int(Capabilities._slot_limit*(caching_threshold/100)) or \
            int(time.time()) - Capabilities._last_check > caching_period:
             logger.debug("Real capabilities fetch from db in progress...")
-            used_slots = 0
             with data.Connection.use() as conn:
-                used_slots = \
-                    len(data.Machine.get({'state': MachineState.RUNNING.value}, conn=conn)) + \
-                    len(data.Machine.get({'state': MachineState.DEPLOYED.value}, conn=conn)) + \
-                    len(data.Machine.get({'state': MachineState.CREATED.value}, conn=conn))
+                if Settings.app["vsphere"]["hosts_folder_name"]:
+                    Capabilities._free_slots = len(data.DeployTicket.get({'taken': 0, 'enabled': 'true'}, conn=conn))
+                else:
+                    used_slots = \
+                        len(data.Machine.get({'state': MachineState.RUNNING.value}, conn=conn)) + \
+                        len(data.Machine.get({'state': MachineState.DEPLOYED.value}, conn=conn)) + \
+                        len(data.Machine.get({'state': MachineState.CREATED.value}, conn=conn))
+                    Capabilities._free_slots = max(Capabilities._slot_limit - used_slots, 0)
             Capabilities._last_check = int(time.time())
-            Capabilities._free_slots = max(Capabilities._slot_limit - used_slots, 0)
             logger.debug("Real capabilities fetch finished")
 
     @staticmethod
