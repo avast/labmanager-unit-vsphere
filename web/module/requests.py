@@ -57,9 +57,10 @@ async def req_get_info(request, req_id):
         if req.state.is_error():
             unit_name = Settings.app.get('unit_name', 'N/A')
             deploy_error_msg = f'deploy of machine \'{req.machine}\' on unit \'{unit_name}\' failed'
+            generic_error_msg = f'request {req_id} ({str(req.type)}) failed, machine_id: {req.machine}'
             result[0]['is_last'] = False
             result.append({
-                'exception': deploy_error_msg if req.type is data.RequestType.DEPLOY else 'request failed',
+                'exception': deploy_error_msg if req.type is data.RequestType.DEPLOY else generic_error_msg,
                 'exception_args': [],
                 'exception_traceback': [],
                 'is_last': True
