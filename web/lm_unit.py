@@ -1,3 +1,4 @@
+import asyncio
 import logging
 
 from sanic import Sanic
@@ -16,6 +17,7 @@ import web.module.screenshots
 import web.module.snapshots
 import web.module.uptime
 from web.settings import Settings as settings
+import web.modeltr as data
 
 logger = logging.getLogger()
 
@@ -60,3 +62,8 @@ lm_unit_webserver.blueprint(web.module.capabilities.capabilities, url_prefix='/a
 lm_unit_webserver.blueprint(web.module.uptime.uptime, url_prefix='/')
 
 lm_unit_webserver.register_middleware(web.middleware.json_response.json_response, 'response')
+
+@lm_unit_webserver.listener("before_server_start")
+async def create_db_connection(app, loop):
+    logger.debug(f"before_server_start {asyncio.current_task()}")
+    data.Connection.connect(dsn=settings.app['db']['dsn'], async_mode=True)
