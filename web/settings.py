@@ -160,8 +160,13 @@ class Settings:
 
 
 Settings.configure()
+log_level_str = Settings.app['log_level']
+env_log_level_str = os.environ.get("SANICAPP_WORKERS_LOG_LEVEL", "None")
+if env_log_level_str in ['DEBUG', 'INFO']:
+    log_level_str = env_log_level_str
+
 logging.basicConfig(
-  level=getattr(logging, Settings.app['log_level']),
+  level=getattr(logging, log_level_str),
   format=Settings.app['log_format'],
   datefmt=Settings.app['log_datefmt']
 )

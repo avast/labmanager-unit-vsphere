@@ -1,3 +1,5 @@
+import asyncio
+
 import psycopg2
 from web.settings import Settings
 import logging
@@ -35,7 +37,8 @@ class Connection(object):
         for i in range(Settings.app['retries']['db_connection']):
             try:
                 self.async_mode = True if 'async_mode' in kwargs else False
-                self.client = psycopg2.connect(kwargs['dsn'], async_=self.async_mode)
+                temp_async_mode = 1 if self.async_mode else 0
+                self.client = psycopg2.connect(kwargs['dsn'], async_=temp_async_mode)
                 if self.async_mode:
                     Connection.__wait_for_completion(self.client)
                     self.acursor = self.client.cursor()
@@ -65,11 +68,29 @@ class Connection(object):
             if state == psycopg2.extensions.POLL_OK:
                 break
             elif state == psycopg2.extensions.POLL_WRITE:
-                select.select([], [client.fileno()], [])
+                # select.select([], [client.fileno()], [])
+                cls.__poll_write_async_wait(client.fileno())
             elif state == psycopg2.extensions.POLL_READ:
-                select.select([client.fileno()], [], [])
+                # select.select([client.fileno()], [], [])
+                cls.__poll_read_async_wait(client.fileno())
             else:
                 raise psycopg2.OperationalError(f'__wait_for_completion->poll() returned {state}')
+
+    @classmethod
+    def __poll_write_async_wait(cls, fileno):
+        while True:
+            [arr1, arr2, arr3] = select.select([], [fileno], [])
+            if arr2 == [fileno]:
+                break
+            asyncio.run(asyncio.sleep(0.01))
+
+    @classmethod
+    def __poll_read_async_wait(cls, fileno):
+        while True:
+            [arr1, arr2, arr3] = select.select([fileno], [], [])
+            if arr1 == [fileno]:
+                break
+            asyncio.run(asyncio.sleep(0.01))
 
     @classmethod
     def use(cls, alias=DEFAULT_CONNECTION_NAME):
@@ -77,8 +98,14 @@ class Connection(object):
             raise ValueError(f'connection {alias} has not been initialized before, please use connect method')
 
         connection = cls.__connections[alias]
-        try:
-            connection["connection"].client.reset()
-        except (psycopg2.InterfaceError, psycopg2.OperationalError, psycopg2.DatabaseError) as e:
-            connection["connection"] = cls(**connection["args"])
-        return cls.__connections[alias]["connection"]
+        if not connection["connection"].async_mode:
+            try:
+                connection["connection"].client.reset()
+            except (psycopg2.InterfaceError,
+                    psycopg2.OperationalError,
+                    psycopg2.DatabaseError,
+                    psycopg2.ProgrammingError
+            ) as e:
+                logging.getLogger(__name__).error(f'Exception occurred when resetting the Connection: {repr(e)}')
+                connection["connection"] = cls(**connection["args"])
+        return connection["connection"]
