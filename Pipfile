@@ -10,7 +10,7 @@ mamba       = "*"
 pycodestyle = "==2.4.0"
 
 [packages]
-sanic   = "==0.8.3"
+sanic   = "==18.12.0"
 aiohttp = "==3.7.4"
 pyvmomi = "==6.7.1.2018.12"
 pyYaml  = "==5.4"
@@ -21,7 +21,8 @@ uvloop  = "==0.14.0"
 requests= ">=2.3.0"
 python_ldap    = "==3.3.1"
 statsd = "==4.0.1"
+urllib3 = "==1.26.16"
 
 [requires]
-python_version = "3.6"
+python_version = "3.7"
 

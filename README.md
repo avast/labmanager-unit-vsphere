@@ -45,7 +45,7 @@ Contributors outside QA Automation team are required to discuss the contribution
     * please fill in database data `db:` section    
     * please fill in vSphere data in `vsphere:` section
 
-* install Python 3.6
+* install Python 3.7
 * install pipenv
   ```
   pip install pipenv

@@ -104,22 +104,6 @@ class Connection(object):
                 logging.getLogger(__name__).warning(f'__poll_read_async_wait takes too long:')
 
     @classmethod
-    def __poll_write_async_wait(cls, fileno):
-        while True:
-            [arr1, arr2, arr3] = select.select([], [fileno], [])
-            if arr2 == [fileno]:
-                break
-            asyncio.run(asyncio.sleep(0.01))
-
-    @classmethod
-    def __poll_read_async_wait(cls, fileno):
-        while True:
-            [arr1, arr2, arr3] = select.select([fileno], [], [])
-            if arr1 == [fileno]:
-                break
-            asyncio.run(asyncio.sleep(0.01))
-
-    @classmethod
     def use(cls, alias=DEFAULT_CONNECTION_NAME):
         if alias not in cls.__connections:
             raise ValueError(f'connection {alias} has not been initialized before, '
