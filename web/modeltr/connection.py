@@ -1,7 +1,10 @@
+import asyncio
+
 import psycopg2
 from web.settings import Settings
 import logging
 import select
+import time
 
 DEFAULT_CONNECTION_NAME = 'default'
 
@@ -35,7 +38,7 @@ class Connection(object):
         for i in range(Settings.app['retries']['db_connection']):
             try:
                 self.async_mode = True if 'async_mode' in kwargs else False
-                self.client = psycopg2.connect(kwargs['dsn'], async_=self.async_mode)
+                self.client = psycopg2.connect(kwargs['dsn'], async_=int(self.async_mode))
                 if self.async_mode:
                     Connection.__wait_for_completion(self.client)
                     self.acursor = self.client.cursor()
@@ -65,20 +68,64 @@ class Connection(object):
             if state == psycopg2.extensions.POLL_OK:
                 break
             elif state == psycopg2.extensions.POLL_WRITE:
-                select.select([], [client.fileno()], [])
+                # select.select([], [client.fileno()], [])
+                cls.__poll_write_async_wait(client.fileno())
             elif state == psycopg2.extensions.POLL_READ:
-                select.select([client.fileno()], [], [])
+                # select.select([client.fileno()], [], [])
+                cls.__poll_read_async_wait(client.fileno())
             else:
-                raise psycopg2.OperationalError(f'__wait_for_completion->poll() returned {state}')
+                raise psycopg2.OperationalError(
+                    f'__wait_for_completion->poll() returned {state}'
+                )
+
+    @classmethod
+    def __poll_write_async_wait(cls, fileno):
+        cnt = 0
+        while True:
+            [_, write_fds, _] = select.select([], [fileno], [], 0.0)
+            if write_fds == [fileno]:
+                break
+            time.sleep(0.1)
+            cnt += 1
+            if cnt > 10:
+                logging.getLogger(__name__).warning(f'__poll_write_async_wait takes too long:')
+
+
+    @classmethod
+    def __poll_read_async_wait(cls, fileno):
+        cnt = 0
+        while True:
+            [read_fds, _, _] = select.select([fileno], [], [], 0.0)
+            if read_fds == [fileno]:
+                break
+            time.sleep(0.1)
+            cnt += 1
+            if cnt > 10:
+                logging.getLogger(__name__).warning(f'__poll_read_async_wait takes too long:')
 
     @classmethod
     def use(cls, alias=DEFAULT_CONNECTION_NAME):
         if alias not in cls.__connections:
-            raise ValueError(f'connection {alias} has not been initialized before, please use connect method')
+            raise ValueError(f'connection {alias} has not been initialized before, '
+                             f'please use connect method')
 
         connection = cls.__connections[alias]
         try:
-            connection["connection"].client.reset()
-        except (psycopg2.InterfaceError, psycopg2.OperationalError, psycopg2.DatabaseError) as e:
-            connection["connection"] = cls(**connection["args"])
-        return cls.__connections[alias]["connection"]
+            if not connection["connection"].async_mode:
+                try:
+                    connection["connection"].client.reset()
+                except (psycopg2.InterfaceError,
+                        psycopg2.OperationalError,
+                        psycopg2.DatabaseError,
+                        psycopg2.ProgrammingError
+                ) as e:
+                    logging.getLogger(__name__).error(
+                        f'Exception occurred when resetting the Connection: {repr(e)}',
+                        exc_info=True
+                    )
+                    connection["connection"] = cls(**connection["args"])
+        except Exception as ex:
+            logging.getLogger(__name__).error(
+                f'Exception when calling use(): {repr(ex)}', exc_info=True
+            )
+        return connection["connection"]
