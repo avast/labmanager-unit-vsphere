@@ -13,6 +13,8 @@ __all__ = [
             'trRequestState',
             'trRequestType',
             'trHiddenString',
+            'trDict',
+            'trBool',
 ]
 
 
@@ -72,3 +74,13 @@ class trRequestState:
 class trRequestType:
     _default = '<null>'
     _type = RequestType
+
+
+class trDict:
+    _default = dict()
+    _type = type(_default)
+
+
+class trBool:
+    _default = False
+    _type = type(_default)

@@ -58,9 +58,10 @@ def handle_exceptions(request, exception):
     }
 
 
-async def check_resources():
+async def check_resources(labels):
     await capabilities.Capabilities.fetch(forced=True)
     if capabilities.Capabilities.get_free_slots() < 1:
+        logger.warning(f"Attempting to deploy a vm when the unit is full at {datetime.datetime.now()}, labels:{labels}")
         raise sanic.exceptions.InvalidUsage('Unit is currently full and cannot process any new machine at the moment.')
 
 
@@ -71,7 +72,7 @@ async def machine_deploy(request):
     el.log_d(request, f'POST /machines wanted by: {login}')
     await check_payload_deploy(request)
     labels = request.headers['json_params']['labels']
-    await check_resources()
+    await check_resources(labels)
     el.log_d(request, "attempting to create db session")
     with data.Connection.use() as conn:
         new_request = data.Request(type=data.RequestType.DEPLOY)

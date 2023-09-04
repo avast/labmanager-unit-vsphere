@@ -1,19 +1,17 @@
 import datetime
-
+import sanic.response
 from sanic import Blueprint
+import socket
 
 uptime = Blueprint('uptime')
 
 
-def uptime2():
-    with open('/proc/uptime', 'r') as f:
-        uptime_seconds = float(f.readline().split()[0])
-    return uptime_seconds
-
-
 @uptime.route('/uptime')
-async def uptime_(request):
-    return {
-        'uptime': uptime2(),
-        'current': datetime.datetime.now()
-    }
+async def uptime_func(request):
+    return sanic.response.json({
+        'current_time': datetime.datetime.now().strftime("%Y-%m-%d, %H:%M:%S"),
+        'timezone': str(datetime.datetime.now(datetime.timezone.utc).astimezone().tzinfo),
+        'host': socket.gethostname(),
+    }, status=200)
+
+

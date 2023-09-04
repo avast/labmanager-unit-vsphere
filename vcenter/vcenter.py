@@ -41,7 +41,7 @@ class VCenter:
         if not result:
             self.connect()
 
-    def connect(self):
+    def connect(self, quick=False):
         context = ssl._create_unverified_context()
 
         si = SmartConnect(
@@ -60,10 +60,12 @@ class VCenter:
 
         self.content = si.content
         self._connection_cookie = si._stub.cookie
+        self.si_stub = si._stub # to be used for rapid managed object creation
         self._connected = True
-        self.vm_folders = VCenter.VmFolders(self)
-        self.refresh_destination_datastore()
-        self.refresh_destination_resource_pool()
+        if not quick:
+            self.vm_folders = VCenter.VmFolders(self)
+            self.refresh_destination_datastore()
+            self.refresh_destination_resource_pool()
 
     def idle(self):
         self.__check_connection()
@@ -482,6 +484,69 @@ class VCenter:
 
         raise RuntimeError("virtual machine hasn't been deployed")
 
+    # noinspection PyProtectedMember
+    def deploy_via_ticket(self, template_name, machine_name, deploy_ticket): # returns a dict with uuid && mo_ref
+        # search for HostSystem
+        host = vim.HostSystem(deploy_ticket['host_moref'], stub=self.si_stub)
+
+        # search for template
+        if Settings.app['vsphere']['hosts_shared_templates']:
+            template = self.__search_machine_by_name(template_name)
+        else:
+            vms = self.__get_objects_list_from_container(host, vim.VirtualMachine)
+            template = None
+            for vm in vms:
+                if vm.name == template_name:
+                    template = vm
+                    break
+
+        # clone a template
+        default_snap_name = Settings.app['vsphere']['default_snapshot_name']
+        destination_machine_folder = self.vm_folders.create_folder(Settings.app['vsphere']['folder'])
+
+        snap = self.search_for_snapshot(template, default_snap_name)
+
+        picked_dest_ds = host.datastore[0]
+        rps = self.__get_objects_list_from_container(self.content.rootFolder, vim.ResourcePool)
+
+        # search for main resource pool that is associated with each ComputeResource
+        # (this ComputeResource has the same name as host System)
+        f_rps = [rp for rp in rps if rp.name == 'Resources' and rp.parent.name == host.name]
+        if len(f_rps) < 1:
+            raise RuntimeError(f"cannot deploy the machine {template_name} as {machine_name} on {host.name}, " +
+                  f"no resource pool the machine may be placed to found")
+
+        relocate_spec = vim.vm.RelocateSpec(
+            datastore=picked_dest_ds,
+            diskMoveType='createNewChildDiskBacking',
+            host=host,pool=f_rps[0],
+            transform=vim.vm.RelocateSpec.Transformation.sparse
+        )
+        spec = vim.vm.CloneSpec(
+            location=relocate_spec,
+            powerOn=False,
+            snapshot=snap,
+            template=False,
+
+        )
+        vm = None
+        for i in range(Settings.app['vsphere']['retries']['deploy']):
+            task = template.CloneVM_Task(
+                destination_machine_folder,
+                machine_name,
+                spec
+            )
+            vm = self.wait_for_task(task)
+            if vm:
+                break
+            self.__sleep_between_tries()
+
+        self.__logger.debug(f'deploy_via_ticket finished with result: {vm}')
+        if vm:
+            return {"uuid": vm.config.uuid, "mo_ref": vm._moId}
+        else:
+            raise RuntimeError(f"cannot deploy the machine {template_name} as {machine_name} on {host.name}")
+
     def __has_sibling_objects(self, parent_folder, vm_uuid):
         self.__logger.debug('are there sibling machines in: {}({})?'.format(
                                                                                 parent_folder,
@@ -583,6 +648,7 @@ class VCenter:
 
     def stop(self, machine_uuid):
         self.__check_connection()
+        failed_attempts = 0
         for i in range(Settings.app['vsphere']['retries']['config_network']):
             try:
                 vm = self.content.searchIndex.FindByUuid(None, machine_uuid, True)
@@ -591,12 +657,21 @@ class VCenter:
                     task = vm.PowerOffVM_Task()
                     self.wait_for_task(task)
                     self.__logger.debug('vm powered off')
-                    return
+                    return True
                 else:
+                    failed_attempts += 1
                     raise Exception('machine {} not found'.format(machine_uuid))
             except Exception:
-                Settings.raven.captureException(exc_info=True)
+                # Settings.raven.captureException(exc_info=True)
                 self.__sleep_between_tries()
+
+        if failed_attempts > 0:
+            try:
+                raise Exception('machine {} not found (occurred {} times)'.format(machine_uuid, failed_attempts))
+            except Exception:
+                Settings.raven.captureException(exc_info=True)
+
+        return False
 
     def reset(self, machine_uuid):
         self.__check_connection()
@@ -915,7 +990,7 @@ class VCenter:
 
     def get_machine_info(self, machine_uuid):
         self.__check_connection()
-        result = {'ip_addresses': [], 'nos_id': '', 'machine_search_link': ''}
+        result = {'ip_addresses': [], 'nos_id': '', 'machine_search_link': '', 'mo_ref': ''}
 
         vm = self.content.searchIndex.FindByUuid(None, machine_uuid, True)
         try:
@@ -937,6 +1012,8 @@ class VCenter:
                     machine_name,
                     '&searchType=simple'
                     )
+
+                result['mo_ref'] = vm._moId
 
                 self.__logger.debug('get machine info end')
         except Exception:
@@ -970,6 +1047,16 @@ class VCenter:
         self.__logger.debug(f'Task finished with status: {state}{error_msg}, result: {result}')
 
         return result
+
+    def get_hosts_in_folder(self, folder_name):
+        result = self.__get_objects_list_from_container(self.content.rootFolder, vim.Folder)
+        hosts_folder = None
+        for folder in result:
+            if folder.name == folder_name:
+                hosts_folder = folder
+                break
+        return self.__get_objects_list_from_container(hosts_folder, vim.HostSystem)
+
 
     class VmFolders:
 

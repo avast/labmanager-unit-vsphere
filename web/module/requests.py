@@ -56,7 +56,7 @@ async def req_get_info(request, req_id):
 
         if req.state.is_error():
             unit_name = Settings.app.get('unit_name', 'N/A')
-            deploy_error_msg = f'deploy of machine \'{req.machine}\' on unit \'{unit_name}\' failed'
+            deploy_error_msg = f'deploy of machine \'{req.machine}\' on unit \'{unit_name}\' failed (request_id: {req_id})'
             generic_error_msg = f'request {req_id} ({str(req.type)}) failed, machine_id: {req.machine}'
             result[0]['is_last'] = False
             result.append({
