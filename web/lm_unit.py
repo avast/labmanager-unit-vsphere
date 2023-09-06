@@ -16,6 +16,7 @@ import web.module.requests
 import web.module.screenshots
 import web.module.snapshots
 import web.module.uptime
+import web.module.hosts
 from web.settings import Settings as settings
 import web.modeltr as data
 
@@ -60,6 +61,7 @@ lm_unit_webserver.blueprint(web.module.screenshots.screenshots, url_prefix='/api
 lm_unit_webserver.blueprint(web.module.uptime.uptime, url_prefix='/api/v4')
 lm_unit_webserver.blueprint(web.module.capabilities.capabilities, url_prefix='/api/v4')
 lm_unit_webserver.blueprint(web.module.uptime.uptime, url_prefix='/')
+lm_unit_webserver.blueprint(web.module.hosts.hosts, url_prefix='/api/v4')
 
 lm_unit_webserver.register_middleware(web.middleware.json_response.json_response, 'response')
 
