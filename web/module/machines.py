@@ -12,8 +12,8 @@ import web.modeltr as data
 import web.module.capabilities as capabilities
 from web.settings import Settings
 
-logger = logging.getLogger(__name__)
 
+logger = logging.getLogger(__name__)
 machines = Blueprint('machines')
 
 
@@ -46,15 +46,10 @@ async def check_payload_deploy(request):
                 raise sanic.exceptions.InvalidUsage(f'\'{template_label}\' label is not supported by this unit')
 
 
-@machines.middleware('request')
-async def obtain_request(request):
-    logger.debug(f'Request obtained: {request}')
-
-
 @machines.exception(sanic.exceptions.InvalidUsage)
 def handle_exceptions(request, exception):
     return {
-            'exception': '|'.join(exception.args),
+        'exception': '|'.join(exception.args),
     }
 
 
@@ -69,15 +64,15 @@ async def check_resources(labels):
 @el.log_func_boundaries
 async def machine_deploy(request):
     login = request.headers.get('AUTHORISED_LOGIN', 'Not specified')
-    el.log_d(request, f'POST /machines wanted by: {login}')
+    el.log_i(request, f'POST /machines wanted by: {login}')
     await check_payload_deploy(request)
     labels = request.headers['json_params']['labels']
     await check_resources(labels)
-    el.log_d(request, "attempting to create db session")
+    el.log_i(request, "attempting to create db session")
     with data.Connection.use() as conn:
         new_request = data.Request(type=data.RequestType.DEPLOY)
         new_request.save(conn=conn)
-        el.log_d(request, "new request saved")
+        el.log_i(request, "new request saved")
         if Settings.app['service']['personalised']:
             # TODO handle case when request.headers["AUTHORISED_LOGIN"] is not specified?
             new_machine = data.Machine(
@@ -93,16 +88,17 @@ async def machine_deploy(request):
                 created_at=datetime.datetime.now()
             )
         new_machine.save(conn=conn)
-        el.log_d(request, "new machine saved")
+        el.log_i(request, "new machine saved")
 
         new_request.machine = str(new_machine.id)
         new_request.save(conn=conn)
-        el.log_d(request, "new request saved again")
+        el.log_i(request, "new request saved again")
 
         # begin machine preparation
         data.Action(type='deploy', request=new_request.id).save(conn=conn)
-        el.log_d(request, "new action saved")
+        el.log_i(request, "new action saved")
 
+    el.log_i(request, "data committed to the db")
     return {
             'request_id': '{}'.format(new_request.id),
             'is_last': False
