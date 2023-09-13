@@ -17,8 +17,10 @@ import web.module.screenshots
 import web.module.snapshots
 import web.module.uptime
 import web.module.hosts
-from web.settings import Settings as settings
+from web.settings import Settings as settings, set_context_var
 import web.modeltr as data
+import random
+
 
 logger = logging.getLogger()
 
@@ -47,7 +49,7 @@ lm_unit_webserver = Sanic(__name__)
 if settings.app['service'].get("auth_module", "<none>") == 'ldap_auth':
     logger.debug("Registering ldap_auth....")
     lm_unit_webserver.register_middleware(web.middleware.auth_ldap.auth, 'request')
-    logger.debug("Registered ldap_auth sucessfully")
+    logger.debug("Registered ldap_auth successfully")
 else:
     lm_unit_webserver.register_middleware(web.middleware.auth.auth, 'request')
 lm_unit_webserver.register_middleware(web.middleware.auth_merger.auth, 'request')
@@ -69,3 +71,22 @@ lm_unit_webserver.register_middleware(web.middleware.json_response.json_response
 async def create_db_connection(app, loop):
     logger.debug(f"before_server_start {asyncio.current_task()}")
     data.Connection.connect(dsn=settings.app['db']['dsn'], async_mode=True)
+
+
+@lm_unit_webserver.middleware('request')
+async def obtain_request(request):
+    method = request.method
+    path = request.path
+    rand_str = "{0:016x}".format(random.getrandbits(64))
+    request.headers['REQUEST_UID'] = rand_str
+    set_context_var('http_request_uuid', rand_str)
+    set_context_var('http_verb', method)
+    set_context_var('http_address', path)
+    # logger.info(f'request({request.path}): {dir(request)} {request.method}')
+    if method == 'GET':
+        logger.debug(f'<< obtained')
+    else:
+        logger.info(f'<< obtained')
+
+
+lm_unit_webserver.config.KEEP_ALIVE = settings.app['sanic_keepalive']

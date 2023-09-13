@@ -6,13 +6,20 @@ import raven
 import yaml
 from deepmerge import Merger as dm
 import statsd
+import contextvars
+
 
 class Settings:
     app = {
             'unit_name': 'fake_unit',
             'log_level': 'DEBUG',
-            'log_format': '%(asctime)s %(thread)d %(threadName)s %(levelname)s: %(message)s',
+            'log_format': '[%(asctime)s] [%(levelname)s] '
+                          '[http:%(http_request_uuid)s] [%(http_verb)s%(http_address)s] '
+                          '%(message)s',
             'log_datefmt': '%Y-%m-%dT%H:%M:%S.000Z',
+            'sanic_accesslog': True,
+            'sanic_keepalive': False,
+            'sanic_debug': False,
             'labels': [],
             'slot_limit': 5,
             'nosid_prefix': None,
@@ -162,11 +169,37 @@ class Settings:
 Settings.configure()
 log_level_str = Settings.app['log_level']
 env_log_level_str = os.environ.get("SANICAPP_WORKERS_LOG_LEVEL", "None")
-if env_log_level_str in ['DEBUG', 'INFO']:
+if env_log_level_str in ['DEBUG', 'INFO', 'WARNING']:
     log_level_str = env_log_level_str
+
+
+logging_vars = {
+    'http_request_uuid': contextvars.ContextVar('http_request_uuid', default=''),
+    'http_verb': contextvars.ContextVar('http_verb', default=''),
+    'http_address': contextvars.ContextVar('http_address', default=''),
+}
+
+
+def set_context_var(name, val):
+    logging_vars[name].set(val)
+
+
+def reset_context_var(name):
+    logging_vars[name].set('')
+
 
 logging.basicConfig(
   level=getattr(logging, log_level_str),
   format=Settings.app['log_format'],
   datefmt=Settings.app['log_datefmt']
 )
+
+
+old_factory = logging.getLogRecordFactory()
+def record_factory(*args, **kwargs):
+    record = old_factory(*args, **kwargs)
+    record.http_request_uuid = logging_vars['http_request_uuid'].get()
+    record.http_verb = logging_vars['http_verb'].get()
+    record.http_address = logging_vars['http_address'].get()
+    return record
+logging.setLogRecordFactory(record_factory)

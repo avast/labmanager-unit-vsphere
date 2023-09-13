@@ -13,7 +13,7 @@ snapshots = Blueprint('snapshots')
 @snapshots.route('/machines/<machine_id>/snapshots', methods=['POST'])
 @el.log_func_boundaries
 async def take_snapshot(request, machine_id):
-    el.log_d(request, "POST /snapshots, getting db connection")
+    el.log_i(request, "POST /snapshots, getting db connection")
     with data.Connection.use() as conn:
 
         snapshot_name = request.headers['json_params']['name']
@@ -21,17 +21,17 @@ async def take_snapshot(request, machine_id):
                                      name=snapshot_name,
                                      created_at=datetime.datetime.now())
         new_snapshot.save(conn=conn)
-        el.log_d(request, "new_snapshot saved")
+        el.log_i(request, "new_snapshot saved")
 
         new_request = data.Request(type=data.RequestType.TAKE_SNAPSHOT)
         new_request.machine = machine_id
         new_request.subject_id = new_snapshot.id
         new_request.save(conn=conn)
-        el.log_d(request, "new_request saved")
+        el.log_i(request, "new_request saved")
 
         # enqueue snapshot preparation
         data.Action(type='other', request=new_request.id).save(conn=conn)
-        el.log_d(request, "new_action saved")
+        el.log_i(request, "new_action saved")
 
         return sanic.response.json(
             {"responses": [{
