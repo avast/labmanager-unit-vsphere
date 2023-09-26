@@ -12,7 +12,7 @@ import time
 import vcenter.vcenter as vcenter
 import web.modeltr as data
 from web.modeltr.enums import MachineState, RequestState, RequestType
-from web.settings import Settings
+from web.settings import Settings, set_context_var, reset_context_var
 from web.stats import stats_increment_metric_worker as stats_increment_metric
 from web.stats import stats_add_timing_metric_worker as stats_add_timing_metric
 
@@ -60,6 +60,8 @@ def release_deploy_ticket(vm_moref):
                     ticket.assigned_vm_moref = ''
                     ticket.taken = 0
                     ticket.save(conn=conn)
+        else:
+            logger.warning("release_deploy_ticket called with empty vm_moref!")
 
 def release_deploy_ticket_id(id):
     if Settings.app["vsphere"]["hosts_folder_name"]:
@@ -372,7 +374,9 @@ def process_other_actions(conn, action, vc):
         machine_ro = data.Machine.get_one({'_id': request.machine}, conn=conn)
 
         m = f'{os.getpid()}-{action.id}->{request.type}|machine.state:{machine_ro.state}|uuid:{machine_ro.provider_id}'
+        set_context_var('http_verb', f"O,a:{action.id},m:{machine_ro.id},mstate:{machine_ro.state}")
         logger.info(m)
+
 
         if request_type is not RequestType.UNDEPLOY:
             if not machine_ro.state.can_be_changed():
@@ -431,6 +435,7 @@ def process_other_actions(conn, action, vc):
 
     finally:
         logger.info(f'{os.getpid()}-{action.id}<-')
+        reset_context_var('http_verb')
 
 
 def signal_handler(signum, frame):
