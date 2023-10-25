@@ -176,9 +176,6 @@ class VCenter:
         return None
 
     def search_for_snapshot(self, vm, snapshot_name):
-        #if vm.snapshot and vm.snapshot.currentSnapshot and vm.snapshot.currentSnapshot.name == snapshot_name:
-        #    self.__logger.debug('snapshot taken from vm.snapshot.currentSnapshot')
-        #    return vm.snapshot.currentSnapshot
         res_snap = self.__find_snapshot_by_name(vm.snapshot.rootSnapshotList, snapshot_name)
         if res_snap is None:
             raise ValueError('snapshot {} cannot be found'.format(snapshot_name))
@@ -512,6 +509,7 @@ class VCenter:
         picked_dest_ds = host.datastore[0]
         # search for local one
         for ds in host.datastore:
+            # local datastores are connected only to one host
             if len(ds.host) == 1:
                 picked_dest_ds = ds
 

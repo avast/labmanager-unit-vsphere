@@ -94,14 +94,17 @@ class Connection(object):
     @classmethod
     def __poll_read_async_wait(cls, fileno):
         cnt = 0
+        sleep_time = 0.2
         while True:
             [read_fds, _, _] = select.select([fileno], [], [], 0.0)
             if read_fds == [fileno]:
                 break
-            time.sleep(0.1)
+            time.sleep(sleep_time)
             cnt += 1
-            if cnt > 10:
-                logging.getLogger(__name__).warning(f'__poll_read_async_wait takes too long:')
+            if cnt > 15:
+                logging.getLogger(__name__).warning(
+                    f'__poll_read_async_wait takes too long: now {cnt*sleep_time} secs in total'
+                )
 
     @classmethod
     def use(cls, alias=DEFAULT_CONNECTION_NAME):

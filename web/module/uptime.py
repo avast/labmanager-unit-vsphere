@@ -22,9 +22,10 @@ async def check_db():
 
 
 @uptime.route('/dbuptime')
-async def uptime_func(request):
+async def dbuptime_func(request):
     return sanic.response.json({
         'current_time': datetime.datetime.now().strftime("%Y-%m-%d, %H:%M:%S"),
         'timezone': str(datetime.datetime.now(datetime.timezone.utc).astimezone().tzinfo),
+        'host': socket.gethostname(),
         'db': await check_db(),
     }, status=200)
