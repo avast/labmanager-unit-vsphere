@@ -12,7 +12,7 @@ import time
 import vcenter.vcenter as vcenter
 import web.modeltr as data
 from web.modeltr.enums import MachineState, RequestState, RequestType
-from web.settings import Settings
+from web.settings import Settings, set_context_var, reset_context_var
 from web.stats import stats_increment_metric_worker as stats_increment_metric
 from web.stats import stats_add_timing_metric_worker as stats_add_timing_metric
 
@@ -60,6 +60,8 @@ def release_deploy_ticket(vm_moref):
                     ticket.assigned_vm_moref = ''
                     ticket.taken = 0
                     ticket.save(conn=conn)
+        else:
+            logger.warning("release_deploy_ticket called with empty vm_moref!")
 
 def release_deploy_ticket_id(id):
     if Settings.app["vsphere"]["hosts_folder_name"]:
@@ -102,11 +104,16 @@ def process_deploy_action(conn, action, vc):
     try:
         request = data.Request.get_one_for_update({'_id': action.request}, conn=conn)
         machine_ro = data.Machine.get_one({'_id': request.machine}, conn=conn)
+        set_context_var('http_verb', f"D,a:{action.id},m:{machine_ro.id},mstate:{machine_ro.state}")
+        logger.info(f'{os.getpid()}-{action.id}->deploy|machine.state: {machine_ro.state}')
+
         if machine_ro.state == MachineState.UNDEPLOYED:
             logger.warning(f"Attempting to deploy undeployed machine, machine.id: {machine_ro.id}")
-        logger.info(f'{os.getpid()}-{action.id}->deploy|machine.state: {machine_ro.state}')
-        stats_increment_metric('deploy-request')
+            # TODO: make sure that it doesn't break anything and remove "if"
+            if Settings.app["vsphere"]["hosts_folder_name"]:
+                raise RuntimeError('Undeployed machine cannot be deployed')
 
+        stats_increment_metric('deploy-request')
         template = get_template(machine_ro.labels)
 
         if Settings.app['vsphere']['default_network_name'] and Settings.app['vsphere']['force_default_network_name']:
@@ -162,6 +169,7 @@ def process_deploy_action(conn, action, vc):
         machine.nos_id = machine_info['nos_id']
         machine.machine_name = machine_info['machine_name']
         machine.machine_search_link = machine_info['machine_search_link']
+        machine.machine_moref = machine_info['mo_ref']
         request.state = RequestState.SUCCESS
         request.save(conn=conn)
         is_machine_running = machine_info['power_state'] == 'poweredOn'
@@ -189,6 +197,7 @@ def process_deploy_action(conn, action, vc):
         action.save(conn=conn)
     finally:
         logger.info(f'{os.getpid()}-{action.id}<-')
+        reset_context_var('http_verb')
 
 
 def action_undeploy(request, machine, vc):
@@ -199,8 +208,6 @@ def action_undeploy(request, machine, vc):
         if result is False:
             logger.debug(f'vc.stop failed (action_undeploy) ({machine.provider_id}) in state {machine.state}')
         vc.undeploy(machine.provider_id)
-        if machine_info["mo_ref"] != '':
-            release_deploy_ticket(machine_info["mo_ref"])
     except Exception:
         try:
             logger.warning(f"error in action_undeploy on a machine ({machine.provider_id}) in state {machine.state}")
@@ -208,6 +215,13 @@ def action_undeploy(request, machine, vc):
             pass
         Settings.raven.captureException(exc_info=True)
         return MachineState.FAILED
+    finally:
+        try:
+            if machine_info["mo_ref"] != '':
+                release_deploy_ticket(machine_info["mo_ref"])
+        except Exception:
+            logger.warning(f"error in action_undeploy, deploy ticket probably not released", exc_info=True)
+
     return MachineState.UNDEPLOYED
 
 
@@ -372,7 +386,9 @@ def process_other_actions(conn, action, vc):
         machine_ro = data.Machine.get_one({'_id': request.machine}, conn=conn)
 
         m = f'{os.getpid()}-{action.id}->{request.type}|machine.state:{machine_ro.state}|uuid:{machine_ro.provider_id}'
+        set_context_var('http_verb', f"O,a:{action.id},m:{machine_ro.id},mstate:{machine_ro.state}")
         logger.info(m)
+
 
         if request_type is not RequestType.UNDEPLOY:
             if not machine_ro.state.can_be_changed():
@@ -431,6 +447,7 @@ def process_other_actions(conn, action, vc):
 
     finally:
         logger.info(f'{os.getpid()}-{action.id}<-')
+        reset_context_var('http_verb')
 
 
 def signal_handler(signum, frame):

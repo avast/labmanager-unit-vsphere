@@ -316,3 +316,14 @@ class Document:
         cur.execute("DELETE FROM documents where type=%s and id=%s", [cls.__name__.lower(), str(query["_id"])])
 
         connection.wait_for_completion()
+
+    @classmethod
+    def test_db_connection(cls, **kwargs):
+        if 'conn' not in kwargs:
+            raise ValueError('parameter conn must be specified')
+        connection = kwargs['conn']
+        cur = connection.get_cursor()
+        cur.execute("SELECT 1;")
+        connection.wait_for_completion()
+        return cur.fetchone()
+

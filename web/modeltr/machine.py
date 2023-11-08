@@ -21,6 +21,7 @@ class Machine(Document):
     screenshots = trList
     snapshots = trList
     owner = trHiddenString
+    machine_moref = trString
 
     _defaults = {
                     'state': MachineState.CREATED,
@@ -34,6 +35,7 @@ class Machine(Document):
                     'screenshots': [],
                     'snapshots': [],
                     'owner': '<not_def>',
+                    'machine_moref': "vm-notset"
                 }
 
     def has_feat_running_label(self) -> bool:

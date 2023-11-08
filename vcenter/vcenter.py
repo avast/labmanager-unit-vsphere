@@ -507,6 +507,12 @@ class VCenter:
         snap = self.search_for_snapshot(template, default_snap_name)
 
         picked_dest_ds = host.datastore[0]
+        # search for local one
+        for ds in host.datastore:
+            # local datastores are connected only to one host
+            if len(ds.host) == 1:
+                picked_dest_ds = ds
+
         rps = self.__get_objects_list_from_container(self.content.rootFolder, vim.ResourcePool)
 
         # search for main resource pool that is associated with each ComputeResource
@@ -1034,13 +1040,13 @@ class VCenter:
                 progress = task.info.progress
                 message = task.info.description.message
             except Exception:
-                self.__logger.warning('Problem obtaining progress or description on a vsphere task')
+                pass
 
             self.__logger.debug('Progress {}% | Task: {}\r'.format(
                 progress,
                 message
             ))
-            time.sleep(0.5)
+            time.sleep(0.7)
 
         result = task.info.result
         error_msg = f', message: {task.info.error.msg}' if state == 'error' else ''
