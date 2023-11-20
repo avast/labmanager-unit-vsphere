@@ -31,7 +31,8 @@ class Capabilities:
                 if Settings.app["vsphere"]["hosts_folder_name"]:
                     ready_hosts1 = data.HostRuntimeInfo.get({"maintenance": "false"}, conn=conn)
                     ready_hosts = [host for host in ready_hosts1 if host.to_be_in_maintenance is False]
-                    vm_per_host = int(Settings.app["slot_limit"] / len(data.HostRuntimeInfo.get({}, conn=conn)))
+                    num_hosts = len(data.HostRuntimeInfo.get({}, conn=conn))
+                    vm_per_host = 0 if num_hosts == 0 else int(Settings.app["slot_limit"] / num_hosts)
                     Capabilities._slot_limit = vm_per_host * len(ready_hosts)
                     Capabilities._free_slots = min(
                         len(data.DeployTicket.get({'taken': 0, 'enabled': 'true'}, conn=conn)),
