@@ -37,10 +37,11 @@ class RequestState(StrEnumBase):
     ABORTED = 'aborted'
 
     def has_finished(self) -> bool:
-        return self is RequestState.SUCCESS or self.is_error()
+        return self is RequestState.SUCCESS or \
+            self is RequestState.ABORTED or self.is_error()
 
     def is_error(self) -> bool:
-        return self in [RequestState.FAILED, RequestState.TIMEOUTED, RequestState.ABORTED]
+        return self in [RequestState.FAILED, RequestState.TIMEOUTED]
 
 
 class RequestType(StrEnumBase):
