@@ -77,7 +77,7 @@ def obtain_statistics(cluster, endpoint, headers, config):
     if config['host_statsd'] and config['port_statsd']:
         send_stats_statsd(cluster, maximum, consumed, percent, config)
     else:
-        send_stats_statsd(cluster, maximum, consumed, percent, config)
+        send_stats_graphite(cluster, maximum, consumed, percent, config)
 
 
 if __name__ == '__main__':
