@@ -70,7 +70,10 @@ def obtain_statistics(cluster, endpoint, headers, config):
         return
 
     consumed = maximum - free
-    percent = consumed * 100 / maximum
+    try:
+        percent = consumed * 100 / maximum
+    except:
+        percent = 0
     if config['host_statsd'] and config['port_statsd']:
         send_stats_statsd(cluster, maximum, consumed, percent, config)
     else:
