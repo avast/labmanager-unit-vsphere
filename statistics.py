@@ -38,7 +38,7 @@ def send_stats_graphite(cluster, machines_max, machines_used, load_percentage, c
 
 def send_stats_statsd(cluster, machines_max, machines_used, load_percentage, config):
     stats_path = config['stats_path']
-    out_string = f"{stats_path}.{cluster}.count:{countt}|g\n" \
+    out_string = f"{stats_path}.{cluster}.count:{machines_max}|g\n" \
                  f"{stats_path}.{cluster}.used:{used}|g\n" \
                  f"{stats_path}.{cluster}.percent:{percent}|g\n"
 
