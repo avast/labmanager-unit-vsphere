@@ -26,7 +26,7 @@ def send_stats_graphite(cluster, machines_max, machines_used, load_percentage, c
     stats_path = config['stats_path']
     out_string = f"{stats_path}.{cluster}.count {machines_max} {timestamp}\n" \
                  f"{stats_path}.{cluster}.used {machines_used} {timestamp}\n" \
-                 f"{stats_path}.{cluster}.percent {percent} {timestamp}\n"
+                 f"{stats_path}.{cluster}.percent {load_percentage} {timestamp}\n"
 
     try:
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
