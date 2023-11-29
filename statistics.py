@@ -47,7 +47,7 @@ def send_stats_statsd(cluster, machines_max, machines_used, load_percentage, con
             s.connect((config['host_statsd'], config['port_statsd']))
             s.sendall(bytes(out_string, 'utf-8'))
     except Exception as ex:
-        logger.warning(f"Exception while sending statsd stats occurred: {ex}\n\nskipped\n")
+        logger.warning(f"Exception while sending statsd stats occurred for {cluster}: {ex}\n\nskipped\n")
 
 
 def obtain_statistics(cluster, endpoint, headers, config):
