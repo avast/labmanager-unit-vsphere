@@ -33,7 +33,7 @@ def send_stats_graphite(cluster, machines_max, machines_used, load_percentage, c
             s.connect((config['host'], config['port']))
             s.sendall(bytes(out_string, 'utf-8'))
     except Exception as ex:
-        logger.warning(f"Exception while sending stats occurred: {ex}\n\nskipped\n")
+        logger.warning(f"Exception while sending stats occurred for {cluster}: {ex}\n\nskipped\n")
 
 
 def send_stats_statsd(cluster, countt, used, percent, config):
