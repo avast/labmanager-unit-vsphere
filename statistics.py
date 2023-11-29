@@ -36,7 +36,7 @@ def send_stats_graphite(cluster, machines_max, machines_used, load_percentage, c
         logger.warning(f"Exception while sending stats occurred for {cluster}: {ex}\n\nskipped\n")
 
 
-def send_stats_statsd(cluster, countt, used, percent, config):
+def send_stats_statsd(cluster, machines_max, machines_used, load_percentage, config):
     stats_path = config['stats_path']
     out_string = f"{stats_path}.{cluster}.count:{countt}|g\n" \
                  f"{stats_path}.{cluster}.used:{used}|g\n" \
