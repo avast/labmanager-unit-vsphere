@@ -24,7 +24,7 @@ def load_config(config_file, env):
 def send_stats_graphite(cluster, machines_max, machines_used, load_percentage, config):
     timestamp = str(datetime.strftime(datetime.now(), '%s'))
     stats_path = config['stats_path']
-    out_string = f"{stats_path}.{cluster}.count {countt} {timestamp}\n" \
+    out_string = f"{stats_path}.{cluster}.count {machines_max} {timestamp}\n" \
                  f"{stats_path}.{cluster}.used {used} {timestamp}\n" \
                  f"{stats_path}.{cluster}.percent {percent} {timestamp}\n"
 
