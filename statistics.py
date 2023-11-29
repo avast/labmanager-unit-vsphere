@@ -25,7 +25,7 @@ def send_stats_graphite(cluster, machines_max, machines_used, load_percentage, c
     timestamp = str(datetime.strftime(datetime.now(), '%s'))
     stats_path = config['stats_path']
     out_string = f"{stats_path}.{cluster}.count {machines_max} {timestamp}\n" \
-                 f"{stats_path}.{cluster}.used {used} {timestamp}\n" \
+                 f"{stats_path}.{cluster}.used {machines_used} {timestamp}\n" \
                  f"{stats_path}.{cluster}.percent {percent} {timestamp}\n"
 
     try:
