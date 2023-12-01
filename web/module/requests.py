@@ -26,7 +26,7 @@ async def req_get_info(request, req_id):
                 }
 
         # TODO solve this better
-        # add requited result data based on request type
+        # add required result data based on request type
         if req.type is data.RequestType.TAKE_SNAPSHOT:
             snap_ro = data.Snapshot.get_one({'_id': req.subject_id}, conn=conn)
             result_dict['id'] = snap_ro.id
@@ -58,13 +58,25 @@ async def req_get_info(request, req_id):
             unit_name = Settings.app.get('unit_name', 'N/A')
             deploy_error_msg = f'deploy of machine \'{req.machine}\' on unit \'{unit_name}\' failed (request_id: {req_id})'
             generic_error_msg = f'request {req_id} ({str(req.type)}) failed, machine_id: {req.machine}'
+            exception_message = deploy_error_msg if req.type is data.RequestType.DEPLOY else generic_error_msg
             result[0]['is_last'] = False
             result.append({
-                'exception': deploy_error_msg if req.type is data.RequestType.DEPLOY else generic_error_msg,
+                'exception': exception_message,
                 'exception_args': [],
                 'exception_traceback': [],
                 'is_last': True
             })
+            logger.warning(f'Exception block returned for request: {req_id}, type: {req.type} -- {exception_message}')
+
+        if req.state.has_finished() and req.state is not data.RequestState.SUCCESS:
+            message = f'Request has finished in state: {str(req.state)}, type: {str(req.type)}'
+            logger.warning(message)
+            try:
+                machine_ro = data.Machine.get_one({'_id': req.machine}, conn=conn)
+                logger.warning(f"{message} and machine ({req.machine}) was in state: {machine_ro.state}")
+            except Exception:
+                pass
+
         return result
 
 

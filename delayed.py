@@ -71,7 +71,9 @@ def delete_unwanted_documents(info, conn):
 def host_info_obtainer(conn, vc):
     if Settings.app["vsphere"]["hosts_folder_name"]:
         start_host_info_obtainer = time.time()
+        logger.info(f'host_info_obtainer started')
         hosts = vc.get_hosts_in_folder(Settings.app["vsphere"]["hosts_folder_name"])
+        logger.info(f'host_info_obtainer vc results obtained')
         info = _safe_array_map(hosts, lambda host: {
             "name": host.name,
             "mo_ref": host._moId,

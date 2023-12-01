@@ -31,7 +31,11 @@ class Ticketeer:
         ready_hosts = data.HostRuntimeInfo.get({"maintenance": "false"}, conn=conn)
         self.ready_hosts = list(filter(lambda host: host.to_be_in_maintenance is False, ready_hosts))
 
-        self.vm_per_host = int(self.slot_limit / len(self.hosts))
+        try:
+            self.vm_per_host = int(self.slot_limit / len(self.hosts))
+            logger.warning("Unit handles 0 hosts, nothing will be deployed from now on")
+        except ZeroDivisionError:
+            self.vm_per_host = 0
         real_slot_limit = self.vm_per_host * len(self.ready_hosts)
 
         # get morefs of all hosts
