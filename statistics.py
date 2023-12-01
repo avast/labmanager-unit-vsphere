@@ -21,7 +21,36 @@ def load_config(config_file, env):
     return whole_config[env]
 
 
-def obtain_statistics(cluster, endpoint, headers, host, port, stats_path):
+def send_stats_graphite(cluster, machines_max, machines_used, load_percentage, config):
+    timestamp = str(datetime.strftime(datetime.now(), '%s'))
+    stats_path = config['stats_path']
+    out_string = f"{stats_path}.{cluster}.count {machines_max} {timestamp}\n" \
+                 f"{stats_path}.{cluster}.used {machines_used} {timestamp}\n" \
+                 f"{stats_path}.{cluster}.percent {load_percentage} {timestamp}\n"
+
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            s.connect((config['host'], config['port']))
+            s.sendall(bytes(out_string, 'utf-8'))
+    except Exception as ex:
+        logger.warning(f"Exception while sending stats occurred for {cluster}: {ex}\n\nskipped\n")
+
+
+def send_stats_statsd(cluster, machines_max, machines_used, load_percentage, config):
+    stats_path = config['stats_path']
+    out_string = f"{stats_path}.{cluster}.count:{machines_max}|g\n" \
+                 f"{stats_path}.{cluster}.used:{machines_used}|g\n" \
+                 f"{stats_path}.{cluster}.percent:{load_percentage}|g\n"
+
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
+            s.connect((config['host_statsd'], config['port_statsd']))
+            s.sendall(bytes(out_string, 'utf-8'))
+    except Exception as ex:
+        logger.warning(f"Exception while sending statsd stats occurred for {cluster}: {ex}\n\nskipped\n")
+
+
+def obtain_statistics(cluster, endpoint, headers, config):
     logger.info(f"sending statistics for cluster: {cluster}")
     # get data
     try:
@@ -41,20 +70,14 @@ def obtain_statistics(cluster, endpoint, headers, host, port, stats_path):
         return
 
     consumed = maximum - free
-    timestamp = str(datetime.strftime(datetime.now(), '%s'))
-    out_string = f"{stats_path}.{cluster}.count {maximum} {timestamp}\n" \
-                 f"{stats_path}.{cluster}.used {consumed} {timestamp}\n" \
-                 f"{stats_path}.{cluster}.percent {consumed * 100 / maximum} {timestamp}\n"
-
-    # open socket
     try:
-        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-            s.connect((host, port))
-            # write data
-            s.sendall(bytes(out_string, 'utf-8'))
-            # close socket
-    except Exception as ex:
-        logger.warning(f"Exception while sending stats occurred: {ex}\n\nskipped\n")
+        percent = consumed * 100 / maximum
+    except:
+        percent = 0
+    if config['host_statsd'] and config['port_statsd']:
+        send_stats_statsd(cluster, maximum, consumed, percent, config)
+    else:
+        send_stats_graphite(cluster, maximum, consumed, percent, config)
 
 
 if __name__ == '__main__':
@@ -74,9 +97,7 @@ if __name__ == '__main__':
                     cluster_name,
                     config['endpoints'][cluster_name],
                     config['headers'],
-                    config['statistics']['host'],
-                    config['statistics']['port'],
-                    config['statistics']['stats_path']
+                    config['statistics']
                 )
 
             logger.info('')
