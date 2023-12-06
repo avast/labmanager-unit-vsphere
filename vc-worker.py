@@ -53,13 +53,19 @@ def alter_deploy_ticket(ticket, vm_moref):
 def release_deploy_ticket(vm_moref):
     if Settings.app["vsphere"]["hosts_folder_name"]:
         if vm_moref != '':
-            with data.Connection.use('qconn') as conn:
-                ticket = data.DeployTicket.get_one({"assigned_vm_moref": vm_moref}, conn=conn)
-                if ticket:
-                    ticket = data.DeployTicket.get_one_for_update({"assigned_vm_moref": vm_moref}, conn=conn)
-                    ticket.assigned_vm_moref = ''
-                    ticket.taken = 0
-                    ticket.save(conn=conn)
+            try:
+                with data.Connection.use('qconn') as conn:
+                    ticket = data.DeployTicket.get_one({"assigned_vm_moref": vm_moref}, conn=conn)
+                    if ticket:
+                        ticket = data.DeployTicket.get_one_for_update({"assigned_vm_moref": vm_moref}, conn=conn)
+                        ticket.assigned_vm_moref = ''
+                        ticket.taken = 0
+                        ticket.save(conn=conn)
+                    else:
+                        logger.debug(f"Deployticket for machine: {vm_moref} not found")
+
+            except Exception as ex:
+                logger.warning(f"Error releasing deploy ticket for {vm_moref}: {repr(ex)}", exc_info=True)
         else:
             logger.warning("release_deploy_ticket called with empty vm_moref!")
 
@@ -187,6 +193,7 @@ def process_deploy_action(conn, action, vc):
         Settings.raven.captureException(exc_info=True)
         logger.error('action_deploy exception: ', exc_info=True)
 
+
         request.state = RequestState.FAILED
         request.save(conn=conn)
         machine = data.Machine.get_one_for_update({'_id': request.machine}, conn=conn)
@@ -232,11 +239,17 @@ def action_start(request, machine, vc):
 
 
 def action_stop(request, machine, vc):
-    stats_increment_metric('stop-request')
-    result = vc.stop(machine.provider_id)
-    if result is False:
-        logger.debug('vc.stop failed (action_stop)')
-    return MachineState.STOPPED
+    try:
+        stats_increment_metric('stop-request')
+        machine_stopped = vc.stop(machine.provider_id)
+        if not machine_stopped:
+            logger.debug('vc.stop failed (action_stop)')
+    finally:
+        try:
+            release_deploy_ticket(machine.machine_moref)
+        except:
+            logger.warning("action_stop: error while releasing deploy ticket")
+        return MachineState.STOPPED
 
 
 def action_reset(request, machine, vc):
