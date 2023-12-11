@@ -149,6 +149,7 @@ def process_deploy_action(conn, action, vc):
                         f"An error occurred when trying to deploy {template} as {output_machine_name} ({repr(e)})"
                     )
                     release_deploy_ticket_id(ticket['id'])
+                    raise e
             else:
                 uuid = vc.deploy(template,
                                  output_machine_name,
