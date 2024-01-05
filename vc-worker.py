@@ -8,6 +8,7 @@ import re
 import signal
 import sys
 import time
+import socket
 
 import vcenter.vcenter as vcenter
 import web.modeltr as data
@@ -476,6 +477,13 @@ if __name__ == '__main__':
         mode = sys.argv[1]
     else:
         mode = 'other'
+
+    logger.info(f'socket default timeout: {socket.getdefaulttimeout()}')
+    socket_default_timeout = Settings.app['vsphere']['socket_default_timeout']
+    if socket_default_timeout is not None:
+        socket.setdefaulttimeout(socket_default_timeout)
+        logger.info(f'set socket timeout: {socket.getdefaulttimeout()}')
+
     data.Connection.connect('conn1', dsn=Settings.app['db']['dsn'])
     if Settings.app["vsphere"]["hosts_folder_name"]:
         data.Connection.connect('qconn', dsn=Settings.app['db']['dsn'])

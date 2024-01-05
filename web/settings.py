@@ -62,6 +62,7 @@ class Settings:
                 'timeout': 20,
                 'hosts_folder_name': None,
                 'hosts_shared_templates': True,
+                'socket_default_timeout': None,
             },
             'vms': {
                 'login_username': None,
