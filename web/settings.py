@@ -13,7 +13,7 @@ class Settings:
     app = {
             'unit_name': 'fake_unit',
             'log_level': 'DEBUG',
-            'log_format': '[%(asctime)s] [%(levelname)s] '
+            'log_format': '[%(asctime)s] [%(process)d] [%(levelname)s] '
                           '[http:%(http_request_uuid)s] [%(http_verb)s%(http_address)s] '
                           '%(message)s',
             'log_datefmt': '%Y-%m-%dT%H:%M:%S.000Z',

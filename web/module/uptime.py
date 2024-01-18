@@ -4,6 +4,7 @@ from sanic import Blueprint
 import socket
 from web.modeltr import Connection
 import web.modeltr.document
+import os
 uptime = Blueprint('uptime')
 
 
@@ -28,4 +29,5 @@ async def dbuptime_func(request):
         'timezone': str(datetime.datetime.now(datetime.timezone.utc).astimezone().tzinfo),
         'host': socket.gethostname(),
         'db': await check_db(),
+        'pid': os.getpid(),
     }, status=200)
