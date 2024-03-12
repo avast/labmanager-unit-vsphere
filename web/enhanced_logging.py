@@ -46,16 +46,16 @@ def log_func_boundaries(func):
     async def inner(*args, **kwargs):
         function_name = func.__code__.co_name
         func_id = get_random_hash()
-        logger.debug(f'func_{func_id}: {function_name} started')
+        logger.info(f'func_{func_id}: {function_name} started')
         if isinstance(args[0], request.Request):
             # TODO: is colon ok here?
             args[0].cookies.update({'__log_extension': f'func_{func_id}:'})
         try:
             return await func.__call__(*args, **kwargs)
         except Exception as e:
-            logger.debug(f'func_{func_id}: {function_name} threw an exception: {e}')
+            logger.info(f'func_{func_id}: {function_name} threw an exception: {e}')
             raise
         finally:
-            logger.debug(f'func_{func_id}: {function_name} finished')
+            logger.info(f'func_{func_id}: {function_name} finished')
 
     return inner
