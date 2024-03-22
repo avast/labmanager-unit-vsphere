@@ -31,7 +31,8 @@ class Settings:
                 'ssl': False,
                 'ssl_ca_certs_file': None,
                 'username': None,
-                'password': None
+                'password': None,
+                'socket_reusability': 'never'
             },
             'vsphere': {
                 'port': 443,
