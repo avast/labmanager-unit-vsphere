@@ -38,6 +38,9 @@ class Connection(object):
                         'quitting the web server worker', exc_info=True
                     )
                     sys.exit(100)
+            except BaseException as e:
+                self.__logger.error(f"Connection->__enter__ unknown exception {type(e)} occurred", exc_info=True)
+                raise e
         last_usage_gap = time.time() - self._last_usage_timestamp
         if (last_usage_gap > 30):
             self.__logger.info(f'Connection has not been used for {last_usage_gap} seconds')
