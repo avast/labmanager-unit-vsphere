@@ -13,6 +13,14 @@ class UnitDbConnectionError(Exception):
 
 class Connection(object):
     def __enter__(self):
+        if self._refresh_conn_on_every_usage():
+            self._last_usage_timestamp = None
+            self._connect()
+            self.__logger.debug("db connection CONNECTED (on_every_usage)")
+        if self.client is None:
+            self._last_usage_timestamp = None
+            self._connect()
+            self.__logger.debug("db connection CONNECTED")
         if self.async_mode:
             try:
                 self.acursor.execute('BEGIN;')
@@ -35,7 +43,7 @@ class Connection(object):
                 except Exception:
                     self.__logger.warning(
                         'Connection to the db failed cannot be re-connected, '
-                        'quitting the web server worker', exc_info=True
+                        'quitting the web server worker or service worker', exc_info=True
                     )
                     sys.exit(100)
             except BaseException as e:
@@ -47,30 +55,39 @@ class Connection(object):
         return self
 
     def __exit__(self, type, value, traceback):
-        if traceback is None:
-            if self.async_mode:
-                self.acursor.execute('COMMIT;')
-                self.wait_for_completion()
+        try:
+            if traceback is None:
+                if self.async_mode:
+                    self.acursor.execute('COMMIT;')
+                    self.wait_for_completion()
+                else:
+                    self.client.commit()
             else:
-                self.client.commit()
-        else:
-            self.__logger.warning(
-                f'Exception occurred when working with Connection, rolled back {traceback}'
-            )
-            if self.async_mode:
-                self.acursor.execute('ROLLBACK;')
-                self.wait_for_completion()
-            else:
-                self.client.rollback()
-
-        self._last_usage_timestamp = time.time()
+                self.__logger.warning(
+                    f'Exception occurred when working with Connection, rolled back {traceback}'
+                )
+                if self.async_mode:
+                    self.acursor.execute('ROLLBACK;')
+                    self.wait_for_completion()
+                else:
+                    self.client.rollback()
+        finally:
+            self._last_usage_timestamp = time.time()
+            try:
+                if self._refresh_conn_on_every_usage():
+                    self.client.close()
+                    self.client = None
+                    self.__logger.debug("db connection DIS-CONNECTED (on_every_usage)")
+            except Exception as ex:
+                self.__logger.warning("Connection autoclose has not been successful")
 
     def __init__(self, **kwargs):
         self.__logger = logging.getLogger(__name__)
         self.async_mode = False
         self._connection_params = kwargs
         self._last_usage_timestamp = None
-        self._connect()
+        self.client = None
+        #self._connect()
 
     def _connect(self):
         for i in range(Settings.app['retries']['db_connection']):
@@ -85,6 +102,10 @@ class Connection(object):
                 self.__logger.warning('Error connecting to the db server', exc_info=True)
                 time.sleep(0.1)
         self._last_usage_timestamp = time.time()
+
+    def _refresh_conn_on_every_usage(self):
+        return "socket_reusability" in self._connection_params and \
+            self._connection_params["socket_reusability"] == "never"
 
     def get_cursor(self):
         return self.acursor if self.async_mode else self.client.cursor()
@@ -167,7 +188,8 @@ class Connection(object):
         try:
             if not connection["connection"].async_mode:
                 try:
-                    connection["connection"].client.reset()
+                    if connection["connection"].client:
+                        connection["connection"].client.reset()
                 except (psycopg2.InterfaceError,
                         psycopg2.OperationalError,
                         psycopg2.DatabaseError,

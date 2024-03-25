@@ -117,8 +117,8 @@ def process_deploy_action(conn, action, vc):
         if machine_ro.state == MachineState.UNDEPLOYED:
             logger.warning(f"Attempting to deploy undeployed machine, machine.id: {machine_ro.id}")
             # TODO: make sure that it doesn't break anything and remove "if"
-            if Settings.app["vsphere"]["hosts_folder_name"]:
-                raise RuntimeError('Undeployed machine cannot be deployed')
+            #if Settings.app["vsphere"]["hosts_folder_name"]:
+            raise RuntimeError('Undeployed machine cannot be deployed')
 
         stats_increment_metric('deploy-request')
         template = get_template(machine_ro.labels)
@@ -484,7 +484,10 @@ if __name__ == '__main__':
         socket.setdefaulttimeout(socket_default_timeout)
         logger.info(f'set socket timeout: {socket.getdefaulttimeout()}')
 
-    data.Connection.connect('conn1', dsn=Settings.app['db']['dsn'])
+    data.Connection.connect('conn1',
+                            dsn=Settings.app['db']['dsn'],
+                            socket_reusability=Settings.app['db']['socket_reusability']
+    )
     if Settings.app["vsphere"]["hosts_folder_name"]:
         data.Connection.connect('qconn', dsn=Settings.app['db']['dsn'])
     vc = vcenter.VCenter()
