@@ -129,7 +129,7 @@ if __name__ == '__main__':
                 now = datetime.datetime.now()
                 action = data.Action.get_one_for_update_skip_locked({'lock': 1}, conn=conn)
 
-                if action and action.next_try < now:
+                if action:
                     if action.repetitions == 0:
                         logger.info(f'action {action.id} timeouted')
                         request = data.Request.get_one_for_update(
@@ -140,9 +140,8 @@ if __name__ == '__main__':
                         request.save(conn=conn)
                         action.lock = -1
                         action.save(conn=conn)
-                    else:
-                        logger.debug(f'firing action: {action.id}')
-                        logger.debug(action.to_dict())
+                    if action.repetitions > 0 and action.next_try < now:
+                        logger.debug(f'firing action: {action.id}: {action.to_dict()}')
                         action.lock = 0
                         action.next_try = datetime.datetime(
                                                             year=datetime.MAXYEAR,
