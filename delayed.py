@@ -125,36 +125,38 @@ if __name__ == '__main__':
                 logger.error('Could not obtain host information: ', exc_info=True)
 
         with data.Connection.use('conn2') as conn:
-            try:
-                now = datetime.datetime.now()
-                action = data.Action.get_one_for_update_skip_locked({'lock': 1}, conn=conn)
+            while process_actions:
+                try:
+                    now = datetime.datetime.now()
+                    action = data.Action.get_one_for_update_skip_locked({'lock': 1}, conn=conn)
 
-                if action and action.next_try < now:
-                    if action.repetitions == 0:
-                        logger.info(f'action {action.id} timeouted')
-                        request = data.Request.get_one_for_update(
-                                                                    {'_id': action.request},
-                                                                    conn=conn
-                        )
-                        request.state = RequestState.TIMEOUTED
-                        request.save(conn=conn)
-                        action.lock = -1
-                        action.save(conn=conn)
+                    if action:
+                        if action.repetitions == 0:
+                            logger.info(f'action {action.id} timeouted')
+                            request = data.Request.get_one_for_update(
+                                                                        {'_id': action.request},
+                                                                        conn=conn
+                            )
+                            request.state = RequestState.TIMEOUTED
+                            request.save(conn=conn)
+                            action.lock = -1
+                            action.save(conn=conn)
+                        if action.repetitions > 0 and action.next_try < now:
+                            logger.debug(f'firing action: {action.id}: {action.to_dict()}')
+                            action.lock = 0
+                            action.next_try = datetime.datetime(
+                                                                year=datetime.MAXYEAR,
+                                                                month=1,
+                                                                day=1
+                            )
+                            action.save(conn=conn)
+                            logger.debug('firing done: {}'.format(action.id))
                     else:
-                        logger.debug(f'firing action: {action.id}')
-                        logger.debug(action.to_dict())
-                        action.lock = 0
-                        action.next_try = datetime.datetime(
-                                                            year=datetime.MAXYEAR,
-                                                            month=1,
-                                                            day=1
-                        )
-                        action.save(conn=conn)
-                        logger.debug('firing done: {}'.format(action.id))
-
-            except Exception:
-                Settings.raven.captureException(exc_info=True)
-                logger.error('Exception while processing request: ', exc_info=True)
+                        break
+                except Exception:
+                    Settings.raven.captureException(exc_info=True)
+                    logger.error('Exception while processing request: ', exc_info=True)
+                    break
 
         time.sleep(Settings.app['delayed']['sleep'])
 
