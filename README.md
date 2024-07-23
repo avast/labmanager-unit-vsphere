@@ -59,7 +59,7 @@ Contributors outside QA Automation team are required to discuss the contribution
 ### Production usage
 * Please repeat the database creation for production use
 * create production section of your config
-* the sevice consists of four microservices that are specified in `Procfile`, so please run all microservices by using e.g. systemd services, docker containers or k8s.
+* the service consists of four microservices that are specified in `Procfile`, so please run all microservices by using e.g. systemd services, docker containers or k8s.
 
 ### Code
 * Python code changes need to follow PEP8, with following mods:
