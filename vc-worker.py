@@ -111,7 +111,7 @@ def process_deploy_action(conn, action, vc):
     try:
         request = data.Request.get_one_for_update({'_id': action.request}, conn=conn)
         machine_ro = data.Machine.get_one({'_id': request.machine}, conn=conn)
-        set_context_var('http_verb', f"D,a:{action.id},m:{machine_ro.id},mstate:{machine_ro.state}")
+        set_context_var('http_verb', f"D,r:{request.machine},a:{action.id},m:{machine_ro.id},mstate:{machine_ro.state}")
         logger.info(f'{os.getpid()}-{action.id}->deploy|machine.id: {machine_ro.id}|machine.state: {machine_ro.state}')
 
         if machine_ro.state == MachineState.UNDEPLOYED:
@@ -401,7 +401,7 @@ def process_other_actions(conn, action, vc):
         machine_ro = data.Machine.get_one({'_id': request.machine}, conn=conn)
 
         m = f'{os.getpid()}-{action.id}->{request.type}|machine.id: {machine_ro.id}|machine.state:{machine_ro.state}|uuid:{machine_ro.provider_id}'
-        set_context_var('http_verb', f"O,a:{action.id},m:{machine_ro.id},mstate:{machine_ro.state}")
+        set_context_var('http_verb', f"O,r:{request.machine},a:{action.id},m:{machine_ro.id},mstate:{machine_ro.state}")
         logger.info(m)
 
 
