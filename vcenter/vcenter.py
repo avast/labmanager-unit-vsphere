@@ -240,6 +240,8 @@ class VCenter:
                 Settings.raven.captureException(exc_info=True)
         raise ValueError('machine {} cannot be found'.format(vm_name))
 
+    search_machine_by_name = __search_machine_by_name
+
     def __get_linked_clone_task(self, template, machine_name, destination_folder, snapshot_name):
 
         snap = self.search_for_snapshot(template, snapshot_name)
@@ -453,6 +455,7 @@ class VCenter:
                 else:
                     self.__logger.debug('vms parent: {}'.format(vm.parent))
                     vm_uuid = vm.config.uuid
+                    self.__logger.debug('vm uuid obtained: {}'.format(vm_uuid))
             except Exception:
                 Settings.raven.captureException(exc_info=True)
                 self.__logger.warning('pyvmomi related exception: ', exc_info=True)
@@ -460,7 +463,9 @@ class VCenter:
             if vm:
                 for retry in range(retry_deploy_count):
                     try:
+                        self.__logger.debug('moving vm {} to folder {}'.format(vm_uuid, destination_folder_name))
                         self.vm_folders.move_vm_to_folder(vm_uuid, destination_folder_name)
+                        self.__logger.debug('moved')
                     except vim.fault.DuplicateName as e:
                         Settings.raven.captureException(exc_info=True)
                         self.__logger.warning(
@@ -480,6 +485,7 @@ class VCenter:
                         self.__sleep_between_tries()
                         raise e
 
+                self.__logger.debug('deployed vm uuid: {}'.format(vm_uuid))
                 return vm_uuid
 
         raise RuntimeError("virtual machine hasn't been deployed")
