@@ -13,7 +13,7 @@ from typing import Union, Optional
 
 from pyVim.connect import SmartConnect
 from pyVmomi import vim, vmodl
-from web.settings import Settings
+from web.settings import Settings, log_to
 
 
 class CloneApproach(enum.Enum):
@@ -25,22 +25,28 @@ class MachineNotFrozenError(RuntimeError):
     pass
 
 
+# logger for logging in this file
+vcenter_logger = logging.getLogger(__name__)
+
+
 class VCenter:
 
     def __init__(self):
         self._connected = False
         self._connection_cookie = None
         self.content = None
-        self.__logger = logging.getLogger(__name__)
+        self.__logger = vcenter_logger
         self.vm_folders = None
         self.destination_datastore = None
         self.destination_resource_pool = None
 
+    @log_to(vcenter_logger)
     def __check_connection(self):
         result = self.__get_objects_list_from_container(self.content.rootFolder, vim.Datastore)
         if not result:
             self.connect()
 
+    @log_to(vcenter_logger)
     def connect(self, quick=False):
         context = ssl._create_unverified_context()
 
@@ -90,6 +96,7 @@ class VCenter:
 
         return None
 
+    @log_to(vcenter_logger)
     def __find_datastore_by_name(self, datastore_name):
         """
         Returns datastore, if datastore with this name exists, otherwise None.
@@ -175,6 +182,7 @@ class VCenter:
 
         return None
 
+    @log_to(vcenter_logger)
     def search_for_snapshot(self, vm, snapshot_name):
         res_snap = self.__find_snapshot_by_name(vm.snapshot.rootSnapshotList, snapshot_name)
         if res_snap is None:
@@ -215,6 +223,7 @@ class VCenter:
             return self.__determine_root_system_folder(dc_folder)
         return root_folder
 
+    @log_to(vcenter_logger)
     def __search_machine_by_name(self, vm_name):
         for cnt in range(Settings.app['vsphere']['retries']['default']):
             try:
@@ -312,6 +321,7 @@ class VCenter:
 
         return task
 
+    @log_to(vcenter_logger)
     def clone_vm(self, template_name: str, machine_name: str, clone_approach: CloneApproach) -> Optional[vim.VirtualMachine]:
         """
         Clones VM specified by template_name to target VM specified by machine_name
@@ -386,6 +396,7 @@ class VCenter:
 
         return vm
 
+    @log_to(vcenter_logger)
     def get_machine_by_uuid(self, machine_uuid):
         self.__logger.debug(f'-> get_machine_by_uuid({machine_uuid})')
         self.__check_connection()
@@ -396,6 +407,7 @@ class VCenter:
         self.__logger.debug(f'<- get_machine_by_uuid: {vm}')
         return vm
 
+    @log_to(vcenter_logger)
     def deploy(self, template_name, machine_name, running, **kwargs):
         self.__check_connection()
         destination_folder_name = Settings.app['vsphere']['folder']
@@ -485,6 +497,7 @@ class VCenter:
         raise RuntimeError("virtual machine hasn't been deployed")
 
     # noinspection PyProtectedMember
+    @log_to(vcenter_logger)
     def deploy_via_ticket(self, template_name, machine_name, deploy_ticket): # returns a dict with uuid && mo_ref
         # search for HostSystem
         host = vim.HostSystem(deploy_ticket['host_moref'], stub=self.si_stub)
@@ -588,6 +601,7 @@ class VCenter:
                     container_view.Destroy()
         return True
 
+    @log_to(vcenter_logger)
     def undeploy(self, machine_uuid):
         self.__check_connection()
         for attempt in range(6):
@@ -640,6 +654,7 @@ class VCenter:
 
         raise RuntimeError("virtual machine hasn't been released")
 
+    @log_to(vcenter_logger)
     def start(self, machine_uuid):
         self.__check_connection()
 
@@ -652,6 +667,7 @@ class VCenter:
         else:
             raise Exception('machine {} not found'.format(machine_uuid))
 
+    @log_to(vcenter_logger)
     def stop(self, machine_uuid):
         self.__check_connection()
         failed_attempts = 0
@@ -679,6 +695,7 @@ class VCenter:
 
         return False
 
+    @log_to(vcenter_logger)
     def reset(self, machine_uuid):
         self.__check_connection()
         vm = self.content.searchIndex.FindByUuid(None, machine_uuid, True)
@@ -743,6 +760,7 @@ class VCenter:
             )
         return upload_url.replace('/rest/', '/hs3/')
 
+    @log_to(vcenter_logger)
     def take_screenshot(self, machine_uuid: str, store_to: str = 'db') -> Union[bytes, str]:
         """
         Takes screenshot of VM and returns it as base64 encoded string or hcp url
@@ -764,6 +782,7 @@ class VCenter:
             else:
                 Settings.raven.captureMessage('Error obtaining screenshot data')
 
+    @log_to(vcenter_logger)
     def take_snapshot(self, machine_uuid, snapshot_name) -> bool:
         self.__logger.debug(f'-> take_snapshot({machine_uuid}, {snapshot_name})')
         vm = self.get_machine_by_uuid(machine_uuid=machine_uuid)
@@ -778,6 +797,7 @@ class VCenter:
         self.__logger.debug(f'<- take_snapshot(): {result}')
         return result
 
+    @log_to(vcenter_logger)
     def remove_snapshot(self, machine_uuid, snapshot_name):
         self.__logger.debug(f'-> remove_snapshot({machine_uuid}, {snapshot_name})')
         vm = self.get_machine_by_uuid(machine_uuid)
@@ -786,6 +806,7 @@ class VCenter:
         self.wait_for_task(remove_task)
         self.__logger.debug(f'<- remove_snapshot()')
 
+    @log_to(vcenter_logger)
     def revert_snapshot(self, machine_uuid, snapshot_name):
         self.__logger.debug(f'-> revert_snapshot({machine_uuid}, {snapshot_name})')
         vm = self.get_machine_by_uuid(machine_uuid)
@@ -868,6 +889,7 @@ class VCenter:
         # failed, nothing to return
         return None
 
+    @log_to(vcenter_logger)
     def config_network(self, device_uuid, **kwargs):
         self.__logger.debug('config_network')
         self.__check_connection()
@@ -994,6 +1016,7 @@ class VCenter:
                 self.__logger.debug("obtaining machine powerState {} failed".format(machine_uuid), exc_info=True)
         return result
 
+    @log_to(vcenter_logger)
     def get_machine_info(self, machine_uuid):
         self.__check_connection()
         result = {'ip_addresses': [], 'nos_id': '', 'machine_search_link': '', 'mo_ref': ''}
