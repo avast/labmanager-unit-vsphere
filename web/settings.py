@@ -172,21 +172,21 @@ class Settings:
 Settings.configure()
 
 # Define a new log level More detailed than DEBUG
-VERBOSE = 5
-logging.addLevelName(VERBOSE, "VERBOSE")
+TRACE = 5
+logging.addLevelName(TRACE, "TRACE")
 
 
 # Add a method to log at the new level
-def verbose(self, message, *args, **kwargs):
-    if self.isEnabledFor(VERBOSE):
-        self._log(VERBOSE, message, args, **kwargs)
+def trace(self, message, *args, **kwargs):
+    if self.isEnabledFor(TRACE):
+        self._log(TRACE, message, args, **kwargs)
 
 
-logging.Logger.verbose = verbose
+logging.Logger.trace = trace
 
 log_level_str = Settings.app['log_level']
 env_log_level_str = os.environ.get("SANICAPP_WORKERS_LOG_LEVEL", "None")
-if env_log_level_str in ['VERBOSE', 'DEBUG', 'INFO', 'WARNING']:
+if env_log_level_str in ['TRACE', 'DEBUG', 'INFO', 'WARNING']:
     log_level_str = env_log_level_str
 
 
@@ -219,12 +219,10 @@ def record_factory(*args, **kwargs):
     record.http_verb = logging_vars['http_verb'].get()
     record.http_address = logging_vars['http_address'].get()
     return record
-
-
 logging.setLogRecordFactory(record_factory)
 
 
-def log_to(logger: logging.Logger, level=VERBOSE):
+def log_to(logger: logging.Logger, level=TRACE):
     def decorator(func):
         @functools.wraps(func)
         def wrapper(*args, **kwargs):
