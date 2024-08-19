@@ -206,7 +206,7 @@ def reset_context_var(name):
 
 
 logging.basicConfig(
-  level=getattr(logging, log_level_str),
+  level=logging.getLevelName(log_level_str),
   format=Settings.app['log_format'],
   datefmt=Settings.app['log_datefmt']
 )
