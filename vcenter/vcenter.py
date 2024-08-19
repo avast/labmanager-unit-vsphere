@@ -40,7 +40,6 @@ class VCenter:
         self.destination_datastore = None
         self.destination_resource_pool = None
 
-    @log_to(vcenter_logger)
     def __check_connection(self):
         result = self.__get_objects_list_from_container(self.content.rootFolder, vim.Datastore)
         if not result:
@@ -707,6 +706,7 @@ class VCenter:
         self.wait_for_task(task)
         self.__logger.debug('vm reset done')
 
+    @log_to(vcenter_logger)
     def _take_screenshot_to_datastore(self, machine_uuid):
         """
         Takes screenshot of VM and saves it in datastore
@@ -923,6 +923,7 @@ class VCenter:
             except Exception:
                 self.__sleep_between_tries()
 
+    @log_to(vcenter_logger)
     def _get_machine_nos_id(self, vm, machine_uuid):
         result = ''
         try:
@@ -943,6 +944,7 @@ class VCenter:
         finally:
             return result
 
+    @log_to(vcenter_logger)
     def run_process_in_vm(self, machine_uuid, username, password, program_path, program_arguments='', run_async=False) -> Optional[int]:
         """
         Runs process with args in VM under 'username', using VMWare tools
@@ -987,6 +989,7 @@ class VCenter:
         else:
             raise RuntimeError(f"Could not start {program_spec.programPath} process!")
 
+    @log_to(vcenter_logger)
     def _get_machine_ips(self, vm, machine_uuid):
         result = []
         try:
@@ -998,6 +1001,7 @@ class VCenter:
         finally:
             return result
 
+    @log_to(vcenter_logger)
     def _get_machine_name(self, vm, machine_uuid):
         result = "unknown"
         for i in range(Settings.app['vsphere']['retries']['default']):
@@ -1007,6 +1011,7 @@ class VCenter:
                 self.__logger.debug("obtaining machine name {} failed".format(machine_uuid), exc_info=True)
         return result
 
+    @log_to(vcenter_logger)
     def _get_machine_power_state(self, vm, machine_uuid):
         result = "unknown"
         for i in range(Settings.app['vsphere']['retries']['default']):
@@ -1077,6 +1082,7 @@ class VCenter:
 
         return result
 
+    @log_to(vcenter_logger)
     def get_hosts_in_folder(self, folder_name):
         result = self.__get_objects_list_from_container(self.content.rootFolder, vim.Folder)
         hosts_folder = None

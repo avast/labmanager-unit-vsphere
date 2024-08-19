@@ -219,10 +219,12 @@ def record_factory(*args, **kwargs):
     record.http_verb = logging_vars['http_verb'].get()
     record.http_address = logging_vars['http_address'].get()
     return record
+
+
 logging.setLogRecordFactory(record_factory)
 
 
-def log_to(logger: logging.Logger, level=logging.DEBUG):
+def log_to(logger: logging.Logger, level=VERBOSE):
     def decorator(func):
         @functools.wraps(func)
         def wrapper(*args, **kwargs):
