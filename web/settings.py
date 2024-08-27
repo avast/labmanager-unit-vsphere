@@ -32,7 +32,12 @@ class Settings:
                 'ssl_ca_certs_file': None,
                 'username': None,
                 'password': None,
-                'socket_reusability': 'never'
+                'socket_reusability': 'never',
+                'async_polling': {
+                    "sleep_time": 0.2,
+                    "warning_time": 10,
+                    "exception_time": 70
+                }
             },
             'vsphere': {
                 'port': 443,
