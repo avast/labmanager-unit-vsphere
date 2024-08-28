@@ -70,7 +70,11 @@ lm_unit_webserver.register_middleware(web.middleware.json_response.json_response
 @lm_unit_webserver.listener("before_server_start")
 async def create_db_connection(app, loop):
     logger.debug(f"before_server_start {asyncio.current_task()}")
-    data.Connection.connect(dsn=settings.app['db']['dsn'], async_mode=True)
+    data.Connection.connect(
+        dsn=settings.app['db']['dsn'],
+        async_mode=True,
+        #socket_reusability=settings.app['db']['socket_reusability']
+    )
 
 
 @lm_unit_webserver.middleware('request')

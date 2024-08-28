@@ -54,9 +54,9 @@ class Connection(object):
             self.__logger.info(f'Connection has not been used for {last_usage_gap} seconds')
         return self
 
-    def __exit__(self, type, value, traceback):
+    def __exit__(self, exc_type, exc_value, exc_traceback):
         try:
-            if traceback is None:
+            if exc_traceback is None:
                 if self.async_mode:
                     self.acursor.execute('COMMIT;')
                     self.wait_for_completion()
@@ -64,13 +64,23 @@ class Connection(object):
                     self.client.commit()
             else:
                 self.__logger.warning(
-                    f'Exception occurred when working with Connection, rolled back {traceback}'
+                    f'Exception occurred when working with Connection, rolling back',
+                    exc_info=(exc_type, exc_value, exc_traceback)
                 )
-                if self.async_mode:
-                    self.acursor.execute('ROLLBACK;')
-                    self.wait_for_completion()
-                else:
-                    self.client.rollback()
+                try:
+                    if self.async_mode:
+                        self.acursor.execute('ROLLBACK;')
+                        self.wait_for_completion()
+                    else:
+                        self.client.rollback()
+
+                    self.__logger.warning(
+                        f'Exception occurred when working with Connection, rolled back'
+                    )
+                except Exception as ex:
+                    self.__logger.warning(
+                        f'Exception occurred when rolling back: {repr(ex)}'
+                    )
         finally:
             self._last_usage_timestamp = time.time()
             try:
@@ -142,41 +152,43 @@ class Connection(object):
     @classmethod
     def __poll_write_wait(cls, fileno):
         cnt = 0
-        sleep_time = 0.2
+        sleep_time = Settings.app['db']['async_polling']['sleep_time']
         while True:
             [_, write_fds, _] = select.select([], [fileno], [], 0.0)
             if write_fds == [fileno]:
                 break
             time.sleep(sleep_time)
             cnt += 1
-            if cnt > 15:
+            elapsed_time = cnt * sleep_time
+            if elapsed_time > Settings.app['db']['async_polling']['warning_time']:
                 logging.getLogger(__name__).warning(
-                    f'__poll_write_async_wait takes too long: now {cnt*sleep_time} secs in total'
+                    f'__poll_write_async_wait takes too long: now {int(elapsed_time)} secs in total'
                 )
-            if cnt > 200:
-                # this practically means that if the client cannot put any data within 40 seconds
-                # we consider the connection as broken
-                raise UnitDbConnectionError()
+            if elapsed_time > Settings.app['db']['async_polling']['exception_time']:
+                # this practically means that if the client cannot put any data within
+                # exception_time seconds, we consider the connection as broken
+                raise UnitDbConnectionError(f"did not obtain response within {elapsed_time} s")
 
 
     @classmethod
     def __poll_read_wait(cls, fileno):
         cnt = 0
-        sleep_time = 0.2
+        sleep_time = Settings.app['db']['async_polling']['sleep_time']
         while True:
             [read_fds, _, _] = select.select([fileno], [], [], 0.0)
             if read_fds == [fileno]:
                 break
             time.sleep(sleep_time)
             cnt += 1
-            if cnt > 15:
+            elapsed_time = cnt * sleep_time
+            if elapsed_time > Settings.app['db']['async_polling']['warning_time']:
                 logging.getLogger(__name__).warning(
-                    f'__poll_read_async_wait takes too long: now {cnt*sleep_time} secs in total'
+                    f'__poll_read_async_wait takes too long: now {int(elapsed_time)} secs in total'
                 )
-            if cnt > 200:
+            if elapsed_time > Settings.app['db']['async_polling']['exception_time']:
                 # this practically means that if the db server cannot send
-                # any data within 40 seconds we consider the connection as broken
-                raise UnitDbConnectionError()
+                # any data within exception_time seconds, we consider the connection as broken
+                raise UnitDbConnectionError(f"did not obtain response within {elapsed_time} s")
 
     @classmethod
     def use(cls, alias=DEFAULT_CONNECTION_NAME):
