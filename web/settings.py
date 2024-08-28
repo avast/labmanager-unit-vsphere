@@ -1,4 +1,5 @@
 import logging
+import functools
 import os
 from collections import Iterable
 
@@ -174,9 +175,23 @@ class Settings:
 
 
 Settings.configure()
+
+# Define a new log level More detailed than DEBUG
+TRACE = 5
+logging.addLevelName(TRACE, "TRACE")
+
+
+# Add a method to log at the new level
+def trace(self, message, *args, **kwargs):
+    if self.isEnabledFor(TRACE):
+        self._log(TRACE, message, args, **kwargs)
+
+
+logging.Logger.trace = trace
+
 log_level_str = Settings.app['log_level']
 env_log_level_str = os.environ.get("SANICAPP_WORKERS_LOG_LEVEL", "None")
-if env_log_level_str in ['DEBUG', 'INFO', 'WARNING']:
+if env_log_level_str in ['TRACE', 'DEBUG', 'INFO', 'WARNING']:
     log_level_str = env_log_level_str
 
 
@@ -196,7 +211,7 @@ def reset_context_var(name):
 
 
 logging.basicConfig(
-  level=getattr(logging, log_level_str),
+  level=logging.getLevelName(log_level_str),
   format=Settings.app['log_format'],
   datefmt=Settings.app['log_datefmt']
 )
@@ -210,3 +225,15 @@ def record_factory(*args, **kwargs):
     record.http_address = logging_vars['http_address'].get()
     return record
 logging.setLogRecordFactory(record_factory)
+
+
+def log_to(logger: logging.Logger, level=TRACE):
+    def decorator(func):
+        @functools.wraps(func)
+        def wrapper(*args, **kwargs):
+            logger.log(level=level, msg=f"-> {func.__name__}()")
+            result = func(*args, **kwargs)
+            logger.log(level=level, msg=f"<- {func.__name__}(): {repr(result)}")
+            return result
+        return wrapper
+    return decorator
