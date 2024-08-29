@@ -184,8 +184,12 @@ def process_deploy_action(conn, action, vc):
         machine.state = MachineState.RUNNING if is_machine_running is True else MachineState.DEPLOYED
         machine.save(conn=conn)
         if is_machine_running:
-            logger.debug('enqueue get info request to obtain IPs for instant cloned machine...')
-            enqueue_get_info_request(machine, conn)
+            # enqueue get machine info only if enabled (currently only for online kitchen units)
+            if Settings.app['enqueue_get_machine_info'] is True:
+                logger.debug('enqueue get info request to obtain IPs for instant cloned machine...')
+                enqueue_get_info_request(machine, conn)
+            else:
+                logger.debug(f'skipping get info request to obtain IPs for instant cloned machine...')
         logger.debug('updating action to be finished...')
         action.lock = -1
         action.save(conn=conn)
@@ -453,7 +457,12 @@ def process_other_actions(conn, action, vc):
         action.save(conn=conn)
 
         if request_type is RequestType.START:
-            enqueue_get_info_request(machine, conn)
+            # enqueue get machine info only if enabled (currently only for online kitchen units)
+            if Settings.app['enqueue_get_machine_info'] is True:
+                logger.debug(f'enqueueing get info request')
+                enqueue_get_info_request(machine, conn)
+            else:
+                logger.debug(f'skipping get info request')
 
     except Exception as e:
         Settings.raven.captureException(exc_info=True)

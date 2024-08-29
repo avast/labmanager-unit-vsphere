@@ -27,6 +27,7 @@ class Settings:
             'raven': {
                 'dsn': 'fake:dsn@fakehost.com/fake'
             },
+            'enqueue_get_machine_info' : True,
             'db': {
                 'host': 'localhost',
                 'ssl': False,
