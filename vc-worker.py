@@ -114,6 +114,7 @@ def process_deploy_action(conn, action, vc):
         set_context_var('http_verb', f"D,r:{action.request},a:{action.id},m:{machine_ro.id},mstate:{machine_ro.state}")
         logger.info(f'{os.getpid()}-{action.id}->deploy|machine.state: {machine_ro.state}')
 
+
         if machine_ro.state == MachineState.UNDEPLOYED:
             logger.warning(f"Attempting to deploy undeployed machine, machine.id: {machine_ro.id}")
             # TODO: make sure that it doesn't break anything and remove "if"
@@ -515,6 +516,7 @@ if __name__ == '__main__':
                 action = data.Action.get_one_for_update_skip_locked({'type': mode, 'lock': 0}, conn=conn)
                 if action:
                     actions_counter += 1
+                    process_start_time = time.time()
                     if mode == 'deploy':
                         if actions_counter > Settings.app['worker']['load_refresh_interval']:
                             actions_counter = 0
@@ -523,6 +525,13 @@ if __name__ == '__main__':
                         process_deploy_action(conn, action, vc)
                     else:
                         process_other_actions(conn, action, vc)
+                    try:
+                        # log processing duration
+                        process_duration = round(time.time() - process_start_time, 1)
+                        request_ro = data.Request.get_one({'_id': action.request}, conn=conn)
+                        logger.debug(f'Processing action {request_ro.type.value} took {process_duration} seconds')
+                    except Exception as e:
+                        logger.warning('Error while logging action processing:', exc_info=True)
                 else:
                     idle_counter += 1
                     if idle_counter > Settings.app['worker']['idle_counter']:
