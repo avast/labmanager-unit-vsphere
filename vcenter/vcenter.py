@@ -871,7 +871,8 @@ class VCenter:
                 resp = requests.get(
                     url=url,
                     verify=False,
-                    auth=(Settings.app['vsphere']['username'], Settings.app['vsphere']['password'])
+                    auth=(Settings.app['vsphere']['username'], Settings.app['vsphere']['password']),
+                    timeout=Settings.app['vsphere']['socket_default_timeout'],
                 )
                 if resp.status_code == 200:
                     # download ok, save return path
