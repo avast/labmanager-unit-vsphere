@@ -512,11 +512,11 @@ if __name__ == '__main__':
     while process_actions:
         time.sleep(Settings.app['worker']['loop_initial_sleep'])
         with data.Connection.use('conn1') as conn:
+            process_start_time = time.time()
             try:
                 action = data.Action.get_one_for_update_skip_locked({'type': mode, 'lock': 0}, conn=conn)
                 if action:
                     actions_counter += 1
-                    process_start_time = time.time()
                     if mode == 'deploy':
                         if actions_counter > Settings.app['worker']['load_refresh_interval']:
                             actions_counter = 0
@@ -525,24 +525,27 @@ if __name__ == '__main__':
                         process_deploy_action(conn, action, vc)
                     else:
                         process_other_actions(conn, action, vc)
-                    try:
-                        # log processing duration
-                        process_duration = round(time.time() - process_start_time, 1)
-                        request_ro = data.Request.get_one({'_id': action.request}, conn=conn)
-                        logger.debug(f'Processing action {request_ro.type.value} took {process_duration} seconds')
-                    except Exception as e:
-                        logger.warning('Error while logging action processing:', exc_info=True)
                 else:
                     idle_counter += 1
                     if idle_counter > Settings.app['worker']['idle_counter']:
                         vc.idle()
                         idle_counter = 0
                     time.sleep(Settings.app['worker']['loop_idle_sleep'])
-            except Exception:
+                result = 'success'
+            except Exception as exc:
+                result = repr(exc)
                 Settings.raven.captureException(exc_info=True)
                 logger.error(f'Exception while processing action: {action.id}', exc_info=True)
                 action.lock = -1
                 action.save(conn=conn)
+
+            # log processing duration
+            try:
+                process_duration = round(time.time() - process_start_time, 1)
+                request_ro = data.Request.get_one({'_id': action.request}, conn=conn)
+                logger.debug(f'Processing action {request_ro.type.value} took {process_duration}s, result was: {result}')
+            except Exception as e:
+                logger.warning('Error while logging action processing:', exc_info=True)
 
     logger.debug("Worker finished")
     time.sleep(1)
