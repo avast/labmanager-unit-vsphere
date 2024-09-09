@@ -513,9 +513,17 @@ if __name__ == '__main__':
         time.sleep(Settings.app['worker']['loop_initial_sleep'])
         with data.Connection.use('conn1') as conn:
             process_start_time = time.time()
+            request_type = 'unknown'
             try:
                 action = data.Action.get_one_for_update_skip_locked({'type': mode, 'lock': 0}, conn=conn)
                 if action:
+                    # get request type just for logging purposes
+                    try:
+                        request_ro = data.Request.get_one({'_id': action.request}, conn=conn)
+                        request_type = request_ro.type.value
+                    except Exception as e:
+                        logger.warning('Error while logging action processing:', exc_info=True)
+
                     actions_counter += 1
                     if mode == 'deploy':
                         if actions_counter > Settings.app['worker']['load_refresh_interval']:
@@ -540,12 +548,8 @@ if __name__ == '__main__':
                 action.save(conn=conn)
 
             # log processing duration
-            try:
-                process_duration = round(time.time() - process_start_time, 1)
-                request_ro = data.Request.get_one({'_id': action.request}, conn=conn)
-                logger.debug(f'Processing action {request_ro.type.value} took {process_duration}s, result was: {result}')
-            except Exception as e:
-                logger.warning('Error while logging action processing:', exc_info=True)
+            process_duration = round(time.time() - process_start_time, 1)
+            logger.debug(f'Processing action {request_type} took {process_duration}s, result was: {result}')
 
     logger.debug("Worker finished")
     time.sleep(1)
