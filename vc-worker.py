@@ -114,6 +114,7 @@ def process_deploy_action(conn, action, vc):
         set_context_var('http_verb', f"D,r:{action.request},a:{action.id},m:{machine_ro.id},mstate:{machine_ro.state}")
         logger.info(f'{os.getpid()}-{action.id}->deploy|machine.state: {machine_ro.state}')
 
+
         if machine_ro.state == MachineState.UNDEPLOYED:
             logger.warning(f"Attempting to deploy undeployed machine, machine.id: {machine_ro.id}")
             # TODO: make sure that it doesn't break anything and remove "if"
@@ -511,9 +512,19 @@ if __name__ == '__main__':
     while process_actions:
         time.sleep(Settings.app['worker']['loop_initial_sleep'])
         with data.Connection.use('conn1') as conn:
+            process_start_time = None
+            request_type = 'unknown'
             try:
                 action = data.Action.get_one_for_update_skip_locked({'type': mode, 'lock': 0}, conn=conn)
                 if action:
+                    process_start_time = time.time()
+                    # get request type just for logging purposes
+                    try:
+                        request_ro = data.Request.get_one({'_id': action.request}, conn=conn)
+                        request_type = request_ro.type.value
+                    except Exception as e:
+                        logger.warning('Error while logging action processing:', exc_info=True)
+
                     actions_counter += 1
                     if mode == 'deploy':
                         if actions_counter > Settings.app['worker']['load_refresh_interval']:
@@ -529,11 +540,18 @@ if __name__ == '__main__':
                         vc.idle()
                         idle_counter = 0
                     time.sleep(Settings.app['worker']['loop_idle_sleep'])
-            except Exception:
+                result = 'success'
+            except Exception as exc:
+                result = repr(exc)
                 Settings.raven.captureException(exc_info=True)
                 logger.error(f'Exception while processing action: {action.id}', exc_info=True)
                 action.lock = -1
                 action.save(conn=conn)
+
+            # log processing duration only if have the action and started measuring
+            if process_start_time is not None:
+                process_duration = round(time.time() - process_start_time, 1)
+                logger.debug(f'Processing action {request_type} took {process_duration}s, result was: {result}')
 
     logger.debug("Worker finished")
     time.sleep(1)
