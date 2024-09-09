@@ -512,11 +512,12 @@ if __name__ == '__main__':
     while process_actions:
         time.sleep(Settings.app['worker']['loop_initial_sleep'])
         with data.Connection.use('conn1') as conn:
-            process_start_time = time.time()
+            process_start_time = None
             request_type = 'unknown'
             try:
                 action = data.Action.get_one_for_update_skip_locked({'type': mode, 'lock': 0}, conn=conn)
                 if action:
+                    process_start_time = time.time()
                     # get request type just for logging purposes
                     try:
                         request_ro = data.Request.get_one({'_id': action.request}, conn=conn)
@@ -547,9 +548,10 @@ if __name__ == '__main__':
                 action.lock = -1
                 action.save(conn=conn)
 
-            # log processing duration
-            process_duration = round(time.time() - process_start_time, 1)
-            logger.debug(f'Processing action {request_type} took {process_duration}s, result was: {result}')
+            # log processing duration only if have the action and started measuring
+            if process_start_time is not None:
+                process_duration = round(time.time() - process_start_time, 1)
+                logger.debug(f'Processing action {request_type} took {process_duration}s, result was: {result}')
 
     logger.debug("Worker finished")
     time.sleep(1)
