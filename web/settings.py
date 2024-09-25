@@ -107,6 +107,8 @@ class Settings:
                 'loop_idle_sleep': 1.5,
                 'load_refresh_interval': 5,  # in number of deployed machines
                 'getinfo_default_repetition_count': 20,
+                'activity_file': '/tmp/lmunit_worker_activity',
+                'activity_log_enabled': False,
             },
             'statsd': {
                 'host': 'foo.bar.com',
