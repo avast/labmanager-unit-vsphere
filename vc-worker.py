@@ -481,6 +481,14 @@ def signal_handler(signum, frame):
     process_actions = False
 
 
+def report_activity():
+    try:
+        with open(Settings.app['worker']['activity_file'],"w"):
+            pass
+    except:
+        pass
+
+
 if __name__ == '__main__':
 
     if len(sys.argv) > 1:
@@ -509,8 +517,11 @@ if __name__ == '__main__':
     signal.signal(signal.SIGINT, signal_handler)
 
     process_actions = True
+    activity_log_enabled = Settings.app['worker']['activity_log_enabled']
     while process_actions:
         time.sleep(Settings.app['worker']['loop_initial_sleep'])
+        if activity_log_enabled:
+            report_activity()
         with data.Connection.use('conn1') as conn:
             process_start_time = None
             request_type = 'unknown'
