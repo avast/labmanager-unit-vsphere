@@ -100,18 +100,21 @@ class Connection(object):
         #self._connect()
 
     def _connect(self):
-        for i in range(Settings.app['retries']['db_connection']):
+        retries = Settings.app['retries']['db_connection']
+        for i in range(retries):
             try:
                 self.async_mode = True if 'async_mode' in self._connection_params else False
                 self.client = psycopg2.connect(self._connection_params['dsn'], async_=int(self.async_mode))
                 if self.async_mode:
                     Connection.__wait_for_completion(self.client)
                     self.acursor = self.client.cursor()
+                self._last_usage_timestamp = time.time()
                 break
             except psycopg2.OperationalError:
                 self.__logger.warning('Error connecting to the db server', exc_info=True)
                 time.sleep(0.1)
-        self._last_usage_timestamp = time.time()
+        else:
+            raise UnitDbConnectionError(f'Error connecting to the db server after {retries} tries')
 
     def _refresh_conn_on_every_usage(self):
         return "socket_reusability" in self._connection_params and \
@@ -129,7 +132,10 @@ class Connection(object):
     @classmethod
     def connect(cls, alias=DEFAULT_CONNECTION_NAME, **kwargs):
         if alias not in cls.__connections:
-            cls.__connections[alias] = {"connection": cls(**kwargs), "args": kwargs}
+            logging.getLogger(__name__).debug("Creating connection object...")
+            connection = cls(**kwargs)
+            logging.getLogger(__name__).debug(f"Connection object created.")
+            cls.__connections[alias] = {"connection": connection, "args": kwargs}
         return cls.use(alias)
 
     @classmethod
