@@ -12,6 +12,7 @@ import urllib.request
 from typing import Union, Optional
 
 from pyVim.connect import SmartConnect
+from pyVim.connect import Disconnect as SmartDisconnect
 from pyVmomi import vim, vmodl
 from web.settings import Settings, log_to
 
@@ -39,6 +40,7 @@ class VCenter:
         self.vm_folders = None
         self.destination_datastore = None
         self.destination_resource_pool = None
+        self.service_instance = None
 
     def __check_connection(self):
         result = self.__get_objects_list_from_container(self.content.rootFolder, vim.Datastore)
@@ -64,6 +66,7 @@ class VCenter:
             )
 
         self.content = si.content
+        self.service_instance = si
         self._connection_cookie = si._stub.cookie
         self.si_stub = si._stub # to be used for rapid managed object creation
         self._connected = True
@@ -71,6 +74,14 @@ class VCenter:
             self.vm_folders = VCenter.VmFolders(self)
             self.refresh_destination_datastore()
             self.refresh_destination_resource_pool()
+
+    @log_to(vcenter_logger)
+    def disconnect(self):
+        try:
+            SmartDisconnect(self.service_instance)
+        except Exception as ex:
+            self.__logger.debug('cannot disconnect from vCenter server', exc_info=True)
+        self.service_instance = None
 
     def idle(self):
         self.__check_connection()

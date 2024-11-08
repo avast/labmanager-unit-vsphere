@@ -117,6 +117,7 @@ class Settings:
             },
             'delayed': {
                 'sleep': 1.5,
+                'reconnect_every_n': 10,
             },
             'ticketeer': {
                 'sleep': 6,
