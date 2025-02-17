@@ -511,6 +511,8 @@ class VCenter:
                 if vm.name == template_name:
                     template = vm
                     break
+        if template is None:
+            raise RuntimeError(f"template >{template_name}< hasn't been found, stopping deployment")
 
         # clone a template
         default_snap_name = Settings.app['vsphere']['default_snapshot_name']
