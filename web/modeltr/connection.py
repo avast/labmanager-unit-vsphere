@@ -8,25 +8,41 @@ import time
 
 DEFAULT_CONNECTION_NAME = 'default'
 
-class UnitDbConnectionError(Exception):
+# occurs when there is a problem with reading / writing data
+# from db server after specific amount of time
+class UnitDbCommunicationError(Exception):
+    pass
+
+# occurs when there is a problem with connection to the db after several tries
+class DbConnectionError(Exception):
     pass
 
 class Connection(object):
     def __enter__(self):
         if self._refresh_conn_on_every_usage():
-            self._last_usage_timestamp = None
-            self._connect()
-            self.__logger.debug("db connection CONNECTED (on_every_usage)")
+            try:
+                self._last_usage_timestamp = None
+                self._connect()
+                self.__logger.debug("db connection CONNECTED (on_every_usage)")
+            except DbConnectionError:
+                self.__logger.error(f"Connection->__enter__ connection to the db "
+                                    f"is currently not possible, quitting the app", exc_info=True)
+                sys.exit(100)
         if self.client is None:
-            self._last_usage_timestamp = None
-            self._connect()
-            self.__logger.debug("db connection CONNECTED")
+            try:
+                self._last_usage_timestamp = None
+                self._connect()
+                self.__logger.debug("db connection CONNECTED")
+            except DbConnectionError:
+                self.__logger.error(f"Connection->__enter__ connection to the db "
+                                    f"is currently not possible, quitting the app", exc_info=True)
+                sys.exit(100)
         if self.async_mode:
             try:
                 self.acursor.execute('BEGIN;')
                 self.wait_for_completion()
             except (
-                    UnitDbConnectionError,
+                    UnitDbCommunicationError,
                     psycopg2.ProgrammingError,
                     psycopg2.InterfaceError,
                     psycopg2.OperationalError
@@ -97,6 +113,7 @@ class Connection(object):
         self._connection_params = kwargs
         self._last_usage_timestamp = None
         self.client = None
+        self.acursor = None
         #self._connect()
 
     def _connect(self):
@@ -108,9 +125,15 @@ class Connection(object):
                     Connection.__wait_for_completion(self.client)
                     self.acursor = self.client.cursor()
                 break
-            except psycopg2.OperationalError:
+            except Exception:
                 self.__logger.warning('Error connecting to the db server', exc_info=True)
-                time.sleep(0.1)
+            time.sleep(0.7*i + 0.2)
+
+        if self.client is None:
+            raise DbConnectionError("Connection to the DB wasn't successful")
+        else:
+            if self.async_mode and self.acursor is None:
+                raise DbConnectionError("Connection to the DB wasn't successful [async mode]")
         self._last_usage_timestamp = time.time()
 
     def _refresh_conn_on_every_usage(self):
@@ -167,7 +190,7 @@ class Connection(object):
             if elapsed_time > Settings.app['db']['async_polling']['exception_time']:
                 # this practically means that if the client cannot put any data within
                 # exception_time seconds, we consider the connection as broken
-                raise UnitDbConnectionError(f"did not obtain response within {elapsed_time} s")
+                raise UnitDbCommunicationError(f"did not obtain response within {elapsed_time} s")
 
 
     @classmethod
@@ -188,7 +211,7 @@ class Connection(object):
             if elapsed_time > Settings.app['db']['async_polling']['exception_time']:
                 # this practically means that if the db server cannot send
                 # any data within exception_time seconds, we consider the connection as broken
-                raise UnitDbConnectionError(f"did not obtain response within {elapsed_time} s")
+                raise UnitDbCommunicationError(f"did not obtain response within {elapsed_time} s")
 
     @classmethod
     def use(cls, alias=DEFAULT_CONNECTION_NAME):
