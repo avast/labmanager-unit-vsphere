@@ -19,6 +19,9 @@ class Settings:
                           '%(message)s',
             'log_datefmt': '%Y-%m-%dT%H:%M:%S.000Z',
             'sanic_accesslog': True,
+            'sanic_custom_accesslog_enable': True,
+            'sanic_custom_accesslog': '%(asctime)s [%(process)s] [ACCESS:%(levelname)s]'
+                                      '[%(host)s]: %(request)s %(message)s %(status)d %(byte)d',
             'sanic_keepalive': False,
             'sanic_debug': False,
             'labels': [],

@@ -20,7 +20,7 @@ import web.module.hosts
 from web.settings import Settings as settings, set_context_var
 import web.modeltr as data
 import random
-
+from sanic.log import LOGGING_CONFIG_DEFAULTS as SANIC_LOG_DEFAULTS
 
 logger = logging.getLogger()
 
@@ -44,7 +44,12 @@ class LMUErrorHandler(ErrorHandler):
         )
 
 
-lm_unit_webserver = Sanic(__name__)
+lmunit_log_config = SANIC_LOG_DEFAULTS.copy()
+if web.settings.Settings.app['sanic_custom_accesslog_enable']:
+    lmunit_log_config['formatters']['access']['format'] = \
+        web.settings.Settings.app['sanic_custom_accesslog']
+
+lm_unit_webserver = Sanic(__name__, log_config=lmunit_log_config)
 
 if settings.app['service'].get("auth_module", "<none>") == 'ldap_auth':
     logger.debug("Registering ldap_auth....")
