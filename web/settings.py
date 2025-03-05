@@ -38,6 +38,7 @@ class Settings:
                 'username': None,
                 'password': None,
                 'socket_reusability': 'never',
+                'sanic_fresh_db_each_request': False,
                 'async_polling': {
                     "sleep_time": 0.2,
                     "warning_time": 10,
