@@ -10,7 +10,7 @@ import sys
 import time
 import socket
 
-import vcenter.vcenter as vcenter
+import hypervisor.vcenter as vcenter
 import web.modeltr as data
 from web.modeltr.enums import MachineState, RequestState, RequestType
 from web.settings import Settings, set_context_var, reset_context_var
@@ -106,7 +106,7 @@ def get_inventory_folder(labels):
     return None
 
 
-def process_deploy_action(conn, action, vc):
+def process_deploy_action(conn, action, hypervisor):
     logger = logging.getLogger('action_deploy')
     try:
         request = data.Request.get_one_for_update({'_id': action.request}, conn=conn)
@@ -143,7 +143,7 @@ def process_deploy_action(conn, action, vc):
             if Settings.app["vsphere"]["hosts_folder_name"]:
                 ticket = acquire_deploy_ticket()
                 try:
-                    machine = vc.deploy_via_ticket(template, output_machine_name, ticket)
+                    machine = hypervisor.deploy_via_ticket(template, output_machine_name, ticket)
                     alter_deploy_ticket(ticket, machine["mo_ref"])
                     uuid = machine["uuid"]
                 except Exception as e:
@@ -153,23 +153,23 @@ def process_deploy_action(conn, action, vc):
                     release_deploy_ticket_id(ticket['id'])
                     raise e
             else:
-                uuid = vc.deploy(template,
-                                 output_machine_name,
-                                 running=has_running_label,
-                                 inventory_folder=inventory_folder)
+                uuid = hypervisor.deploy(template,
+                                         output_machine_name,
+                                         running=has_running_label,
+                                         inventory_folder=inventory_folder)
             if network_interface:
-                vc.config_network(uuid, interface_name=network_interface)
-            machine_info = vc.get_machine_info(uuid)
+                hypervisor.config_network(uuid, interface_name=network_interface)
+            machine_info = hypervisor.get_machine_info(uuid)
         except Exception as e:
             Settings.raven.captureException(exc_info=True)
             logger.warning('Exception deploying machine: ', exc_info=True)
             raise e
 
         if not machine_info['nos_id']:
-            result = vc.stop(uuid)
+            result = hypervisor.stop(uuid)
             if result is False:
                 logger.debug('vc.stop failed (nos_id problem)')
-            vc.undeploy(uuid)
+            hypervisor.undeploy(uuid)
             release_deploy_ticket(machine_info['mo_ref'])
             raise RuntimeError(f"NOS ID hasn't been returned for machine {uuid}")
 
@@ -214,14 +214,14 @@ def process_deploy_action(conn, action, vc):
         reset_context_var('http_verb')
 
 
-def action_undeploy(request, machine, vc):
+def action_undeploy(request, machine, hypervisor):
     try:
         stats_increment_metric('undeploy-request')
-        machine_info = vc.get_machine_info(machine.provider_id)
-        result = vc.stop(machine.provider_id)
+        machine_info = hypervisor.get_machine_info(machine.provider_id)
+        result = hypervisor.stop(machine.provider_id)
         if result is False:
             logger.debug(f'vc.stop failed (action_undeploy) ({machine.provider_id}) in state {machine.state}')
-        vc.undeploy(machine.provider_id)
+        hypervisor.undeploy(machine.provider_id)
     except Exception:
         try:
             logger.warning(f"error in action_undeploy on a machine ({machine.provider_id}) in state {machine.state}")
@@ -239,16 +239,16 @@ def action_undeploy(request, machine, vc):
     return MachineState.UNDEPLOYED
 
 
-def action_start(request, machine, vc):
+def action_start(request, machine, hypervisor):
     stats_increment_metric('start-request')
-    vc.start(machine.provider_id)
+    hypervisor.start(machine.provider_id)
     return MachineState.RUNNING
 
 
-def action_stop(request, machine, vc):
+def action_stop(request, machine, hypervisor):
     try:
         stats_increment_metric('stop-request')
-        machine_stopped = vc.stop(machine.provider_id)
+        machine_stopped = hypervisor.stop(machine.provider_id)
         if not machine_stopped:
             logger.debug('vc.stop failed (action_stop)')
     finally:
@@ -259,17 +259,17 @@ def action_stop(request, machine, vc):
         return MachineState.STOPPED
 
 
-def action_reset(request, machine, vc):
+def action_reset(request, machine, hypervisor):
     stats_increment_metric('restart-request')
-    vc.reset(machine.provider_id)
+    hypervisor.reset(machine.provider_id)
     return None
 
 
-def action_get_info(request, machine_ro, vc, action, conn):
+def action_get_info(request, machine_ro, hypervisor, action, conn):
     logger.debug(request.to_dict())
     stats_increment_metric('getinfo-request')
     try:
-        info = vc.get_machine_info(machine_ro.provider_id)
+        info = hypervisor.get_machine_info(machine_ro.provider_id)
         logger.debug(info)
     except Exception:
         logger.error('get_info exception: ', exc_info=True)
@@ -316,14 +316,14 @@ def enqueue_get_info_request(machine, conn):
     ).save(conn=conn)
 
 
-def action_take_screenshot(request, machine, vc, conn):
+def action_take_screenshot(request, machine, hypervisor, conn):
     stats_increment_metric('takess-request')
     ss_destination = Settings.app['service']['screenshot_store']
     if ss_destination not in ['db', 'hcp']:
         logger.warning(f'wrong configuration for screenshot_store: {ss_destination}')
         ss_destination = 'db'
 
-    screenshot_data = vc.take_screenshot(machine.provider_id, store_to=ss_destination)
+    screenshot_data = hypervisor.take_screenshot(machine.provider_id, store_to=ss_destination)
     if request.subject_id:
         ss = data.Screenshot.get_one_for_update({'_id': request.subject_id}, conn=conn)
         if screenshot_data:
@@ -342,11 +342,11 @@ def action_take_screenshot(request, machine, vc, conn):
     return None
 
 
-def action_take_snapshot(request, machine, vc, conn):
+def action_take_snapshot(request, machine, hypervisor, conn):
     if request.subject_id:
         stats_increment_metric('snaptake-request')
         snap_ro = data.Snapshot.get_one({'_id': request.subject_id}, conn=conn)
-        result = vc.take_snapshot(machine_uuid=machine.provider_id, snapshot_name=snap_ro.get_uniq_name())
+        result = hypervisor.take_snapshot(machine_uuid=machine.provider_id, snapshot_name=snap_ro.get_uniq_name())
         snap = data.Snapshot.get_one_for_update({'_id': request.subject_id}, conn=conn)
         snap.status = 'success' if result is True else 'failed'
         snap.save(conn=conn)
@@ -362,11 +362,11 @@ def action_take_snapshot(request, machine, vc, conn):
 
 
 # TODO deduplicate with 'action_take_snapshot()' later
-def action_restore_snapshot(request, machine, vc, conn):
+def action_restore_snapshot(request, machine, hypervisor, conn):
     if request.subject_id:
         stats_increment_metric('snaprestore-request')
         snap_ro = data.Snapshot.get_one({'_id': request.subject_id}, conn=conn)
-        result = vc.revert_snapshot(machine_uuid=machine.provider_id, snapshot_name=snap_ro.get_uniq_name())
+        result = hypervisor.revert_snapshot(machine_uuid=machine.provider_id, snapshot_name=snap_ro.get_uniq_name())
         snap = data.Snapshot.get_one_for_update({'_id': request.subject_id}, conn=conn)
         snap.status = 'success' if result is True else 'failed'
         snap.save(conn=conn)
@@ -377,11 +377,11 @@ def action_restore_snapshot(request, machine, vc, conn):
 
 
 # TODO deduplicate with 'action_take_snapshot()' later
-def action_delete_snapshot(request, machine, vc, conn):
+def action_delete_snapshot(request, machine, hypervisor, conn):
     if request.subject_id:
         stats_increment_metric('snapdelete-request')
         snap_ro = data.Snapshot.get_one({'_id': request.subject_id}, conn=conn)
-        result = vc.remove_snapshot(machine_uuid=machine.provider_id, snapshot_name=snap_ro.get_uniq_name())
+        result = hypervisor.remove_snapshot(machine_uuid=machine.provider_id, snapshot_name=snap_ro.get_uniq_name())
         snap = data.Snapshot.get_one_for_update({'_id': request.subject_id}, conn=conn)
         snap.status = 'success' if result is True else 'failed'
         snap.save(conn=conn)
@@ -396,7 +396,7 @@ def action_delete_snapshot(request, machine, vc, conn):
     return None
 
 
-def process_other_actions(conn, action, vc):
+def process_other_actions(conn, action, hypervisor):
     logger = logging.getLogger('action_others')
     logger.info(f'{os.getpid()}-{action.id}->')
 
@@ -420,24 +420,24 @@ def process_other_actions(conn, action, vc):
                 return
 
         if request_type is RequestType.UNDEPLOY:
-            new_machine_state = action_undeploy(request, machine_ro, vc)
+            new_machine_state = action_undeploy(request, machine_ro, hypervisor)
         elif request_type is RequestType.START:
-            new_machine_state = action_start(request, machine_ro, vc)
+            new_machine_state = action_start(request, machine_ro, hypervisor)
         elif request_type is RequestType.STOP:
-            new_machine_state = action_stop(request, machine_ro, vc)
+            new_machine_state = action_stop(request, machine_ro, hypervisor)
         elif request_type is RequestType.RESTART:
-            new_machine_state = action_reset(request, machine_ro, vc)
+            new_machine_state = action_reset(request, machine_ro, hypervisor)
         elif request_type is RequestType.GET_INFO:
-            action_get_info(request, machine_ro, vc, action, conn)
+            action_get_info(request, machine_ro, hypervisor, action, conn)
             return
         elif request_type is RequestType.TAKE_SCREENSHOT:
-            new_machine_state = action_take_screenshot(request, machine_ro, vc, conn)
+            new_machine_state = action_take_screenshot(request, machine_ro, hypervisor, conn)
         elif request_type is RequestType.TAKE_SNAPSHOT:
-            new_machine_state = action_take_snapshot(request, machine_ro, vc, conn)
+            new_machine_state = action_take_snapshot(request, machine_ro, hypervisor, conn)
         elif request_type is RequestType.RESTORE_SNAPSHOT:
-            new_machine_state = action_restore_snapshot(request, machine_ro, vc, conn)
+            new_machine_state = action_restore_snapshot(request, machine_ro, hypervisor, conn)
         elif request_type is RequestType.DELETE_SNAPSHOT:
-            new_machine_state = action_delete_snapshot(request, machine_ro, vc, conn)
+            new_machine_state = action_delete_snapshot(request, machine_ro, hypervisor, conn)
         else:
             # this should not happen
             Settings.raven.captureMessage(f'Unhandled request type: {request_type}')
@@ -508,8 +508,8 @@ if __name__ == '__main__':
     )
     if Settings.app["vsphere"]["hosts_folder_name"]:
         data.Connection.connect('qconn', dsn=Settings.app['db']['dsn'])
-    vc = vcenter.VCenter()
-    vc.connect()
+    hypervisor = vcenter.VCenter()
+    hypervisor.connect()
 
     idle_counter = 0
     actions_counter = 0
@@ -540,15 +540,15 @@ if __name__ == '__main__':
                     if mode == 'deploy':
                         if actions_counter > Settings.app['worker']['load_refresh_interval']:
                             actions_counter = 0
-                            vc.refresh_destination_datastore()
-                            vc.refresh_destination_resource_pool()
-                        process_deploy_action(conn, action, vc)
+                            hypervisor.refresh_destination_datastore()
+                            hypervisor.refresh_destination_resource_pool()
+                        process_deploy_action(conn, action, hypervisor)
                     else:
-                        process_other_actions(conn, action, vc)
+                        process_other_actions(conn, action, hypervisor)
                 else:
                     idle_counter += 1
                     if idle_counter > Settings.app['worker']['idle_counter']:
-                        vc.idle()
+                        hypervisor.idle()
                         idle_counter = 0
                     time.sleep(Settings.app['worker']['loop_idle_sleep'])
                 result = 'success'

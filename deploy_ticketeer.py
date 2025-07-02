@@ -7,7 +7,7 @@ import time
 
 import web.modeltr as data
 from web.settings import Settings
-import vcenter.vcenter as vcenter
+import hypervisor.vcenter as vcenter
 
 
 logger = logging.getLogger(__name__)
@@ -208,10 +208,10 @@ if __name__ == '__main__':
 
     signal.signal(signal.SIGTERM, signal_handler)
     signal.signal(signal.SIGINT, signal_handler)
-    vc = None
+    hypervisor = None
     if Settings.app["vsphere"]["hosts_folder_name"]:
-        vc = vcenter.VCenter()
-        vc.connect(quick=True)
+        hypervisor = vcenter.VCenter()
+        hypervisor.connect(quick=True)
 
     process_actions = True
     revolution = 0

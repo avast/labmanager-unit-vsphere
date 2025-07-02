@@ -8,7 +8,7 @@ import time
 import web.modeltr as data
 from web.modeltr.enums import RequestState
 from web.settings import Settings
-import vcenter.vcenter as vcenter
+import hypervisor.vcenter as vcenter
 
 logger = logging.getLogger(__name__)
 
@@ -68,11 +68,11 @@ def delete_unwanted_documents(info, conn):
 
 
 # noinspection PyProtectedMember
-def host_info_obtainer(conn, vc):
+def host_info_obtainer(conn, hypervisor):
     if Settings.app["vsphere"]["hosts_folder_name"]:
         start_host_info_obtainer = time.time()
         logger.info(f'host_info_obtainer started')
-        hosts = vc.get_hosts_in_folder(Settings.app["vsphere"]["hosts_folder_name"])
+        hosts = hypervisor.get_hosts_in_folder(Settings.app["vsphere"]["hosts_folder_name"])
         logger.info(f'host_info_obtainer vc results obtained')
         info = _safe_array_map(hosts, lambda host: {
             "name": host.name,
@@ -109,17 +109,17 @@ if __name__ == '__main__':
 
     signal.signal(signal.SIGTERM, signal_handler)
     signal.signal(signal.SIGINT, signal_handler)
-    vc = None
+    hypervisor = None
     if Settings.app["vsphere"]["hosts_folder_name"]:
-        vc = vcenter.VCenter()
-        vc.connect(quick=True)
+        hypervisor = vcenter.VCenter()
+        hypervisor.connect(quick=True)
 
     process_actions = True
     while process_actions:
 
         with data.Connection.use('conn2') as conn:
             try:
-                host_info_obtainer(conn, vc)
+                host_info_obtainer(conn, hypervisor)
             except Exception:
                 Settings.raven.captureException(exc_info=True)
                 logger.error('Could not obtain host information: ', exc_info=True)
