@@ -1307,3 +1307,6 @@ class VCenter:
                 raise Exception(msg)
 
             return f_folder
+
+
+Hypervisor = VCenter

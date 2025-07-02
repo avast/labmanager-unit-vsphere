@@ -11,6 +11,7 @@ import time
 import socket
 
 import hypervisor.vcenter as vcenter
+import hypervisor.hyperv as hv
 import web.modeltr as data
 from web.modeltr.enums import MachineState, RequestState, RequestType
 from web.settings import Settings, set_context_var, reset_context_var
@@ -508,7 +509,8 @@ if __name__ == '__main__':
     )
     if Settings.app["vsphere"]["hosts_folder_name"]:
         data.Connection.connect('qconn', dsn=Settings.app['db']['dsn'])
-    hypervisor = vcenter.VCenter()
+    #hypervisor = vcenter.VCenter()
+    hypervisor = getattr(sys.modules[Settings.app['hypervisor']], "Hypervisor")()
     hypervisor.connect()
 
     idle_counter = 0

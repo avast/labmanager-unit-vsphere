@@ -93,4 +93,6 @@ class Hyperv:
         hyperv_logger.warning(f"Method >>{inspect.currentframe().f_code.co_name}<<"
                               f" has not been implemented yet in {sys.modules[__name__]}")
 
+
+Hypervisor = Hyperv
 # eof
