@@ -31,7 +31,7 @@ class Settings:
                 'dsn': 'fake:dsn@fakehost.com/fake'
             },
             'enqueue_get_machine_info' : True,
-            'hypervisor': 'vcenter',
+            'hypervisor': 'hypervisor.vcenter',
             'db': {
                 'host': 'localhost',
                 'ssl': False,
@@ -77,9 +77,14 @@ class Settings:
                 'socket_default_timeout': None,
             },
             'hyperv':{
-                'servers': ['foobar'],
+                'servers': [],
                 'username': 'henk',
                 'key': '/tmp/nowhere',
+                'ssh': 'ssh',
+                'ssh_extra_params': [],
+                'replacements':{
+
+                },
             },
             'vms': {
                 'login_username': None,
