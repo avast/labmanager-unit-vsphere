@@ -91,6 +91,8 @@ class Settings:
                     'caching_enabled_threshold': 90,  # in percent
                 },
                 'screenshot_store': 'db',  # hcp eventually
+                'include_machine_subnet_info': False,
+                'machine_subnet_info': "10.99.88.0/24",
             },
             'hcp': {
                 'url': None,
