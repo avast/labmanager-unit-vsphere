@@ -57,6 +57,8 @@ class Hyperv:
             ex.log_last_error_stream("deploy: ")
             hyperv_logger.debug(str(ex))
             return machine_name
+        except Exception as exc:
+            raise exc
         finally:
             hyperv_logger.debug("deploy: finished")
 
@@ -71,6 +73,8 @@ class Hyperv:
             ex.execute("setVmNetwork.t", replacements)
             ex.log_last_error_stream("config_network: ")
             hyperv_logger.debug(str(ex))
+        except Exception as exc:
+            raise exc
         finally:
             hyperv_logger.debug("config_network: finished")
 
@@ -94,6 +98,8 @@ class Hyperv:
                     mac = str(line).replace("OUT::MAC=", "")
                     res["nos_id"] = f"{Settings.app['nosid_prefix']}{mac}"
             hyperv_logger.debug(str(ex))
+        except Exception as exc:
+            raise exc
         finally:
             hyperv_logger.debug("get_machine_info: finished")
 
@@ -110,6 +116,8 @@ class Hyperv:
             ex.execute("startVm.t", replacements)
             ex.log_last_error_stream("start: ")
             hyperv_logger.debug(str(ex))
+        except Exception as exc:
+            raise exc
         finally:
             hyperv_logger.debug("start: finished")
 
@@ -124,6 +132,8 @@ class Hyperv:
             ex.execute("stopVm.t", replacements)
             ex.log_last_error_stream("stop: ")
             hyperv_logger.debug(str(ex))
+        except Exception as exc:
+            raise exc
         finally:
             hyperv_logger.debug("stop: finished")
 
@@ -137,6 +147,8 @@ class Hyperv:
             ex.execute("undeployVm.t", replacements)
             ex.log_last_error_stream("undeploy: ")
             hyperv_logger.debug(str(ex))
+        except Exception as exc:
+            raise exc
         finally:
             hyperv_logger.debug("undeploy: finished")
 
@@ -151,6 +163,8 @@ class Hyperv:
             ex.execute("resetVm.t", replacements)
             ex.log_last_error_stream("reset: ")
             hyperv_logger.debug(str(ex))
+        except Exception as exc:
+            raise exc
         finally:
             hyperv_logger.debug("reset: finished")
 
@@ -161,8 +175,20 @@ class Hyperv:
 
     @log_to(hyperv_logger)
     def take_snapshot(self, machine_uuid, snapshot_name) -> bool:
-        hyperv_logger.warning(f"Method >>{inspect.currentframe().f_code.co_name}<<"
-                              f" has not been implemented yet in {sys.modules[__name__]}")
+        try:
+            hyperv_logger.debug(f"take_snapshot: started ({device_uuid})")
+            ex = HypervExecutor()
+            replacements = copy.deepcopy(Settings.app['hyperv']['replacements'])
+            replacements["NEW_VM_NAME"] = device_uuid
+            replacements["SNAPSHOT_NAME"] = snapshot_name
+            #print(replacements)
+            ex.execute("takeSnapshot.t", replacements)
+            ex.log_last_error_stream("take_snapshot: ")
+            hyperv_logger.debug(str(ex))
+        except Exception as exc:
+            raise exc
+        finally:
+            hyperv_logger.debug("take_snapshot: finished")
 
     @log_to(hyperv_logger)
     def revert_snapshot(self, machine_uuid, snapshot_name):
@@ -206,9 +232,11 @@ class HypervExecutor:
             executable_with_params,
             input = input_data,
             capture_output = True,
-            text = True
+            text = True,
+            timeout = 45
         )
         stop_time = time.time()
+        #hyperv_logger.debug(f"exec result: {result}")
         self.last_return_code = result.returncode
         self.last_err = result.stderr
         self.last_out = result.stdout
@@ -216,6 +244,7 @@ class HypervExecutor:
 
     def log_last_error_stream(self, prefix=""):
         if self.last_err is None:
+            hyperv_logger.warning(f"{prefix} There is nothing in last stderr stream!")
             return
         for line in self.last_err.split('\n'):
             hyperv_logger.debug(f"{prefix}{line}")
@@ -224,6 +253,9 @@ class HypervExecutor:
         res = []
 
         delim = "\n"
+        if self.last_out is None:
+            hyperv_logger.warning("get_results_from_last_run: last stdout was none, nothing can be parsed")
+            return []
         sp = self.last_out.split(delim)
         pattern = re.compile("^OUT::")
         for l in sp:
