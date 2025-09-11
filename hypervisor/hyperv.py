@@ -161,8 +161,20 @@ class Hyperv:
 
     @log_to(hyperv_logger)
     def take_snapshot(self, machine_uuid, snapshot_name) -> bool:
-        hyperv_logger.warning(f"Method >>{inspect.currentframe().f_code.co_name}<<"
-                              f" has not been implemented yet in {sys.modules[__name__]}")
+        try:
+            hyperv_logger.debug(f"take_snapshot: started ({machine_uuid})")
+            ex = HypervExecutor()
+            replacements = copy.deepcopy(Settings.app['hyperv']['replacements'])
+            replacements["VM_NAME"] = machine_uuid
+            replacements["SNAPSHOT_NAME"] = snapshot_name
+            # print(replacements)
+            ex.execute("takeSnapshot.t", replacements)
+            ex.log_last_error_stream("take_snapshot: ")
+            hyperv_logger.debug(str(ex))
+        except Exception as exc:
+            raise exc
+        finally:
+            hyperv_logger.debug("take_snapshot: finished")
 
     @log_to(hyperv_logger)
     def revert_snapshot(self, machine_uuid, snapshot_name):
@@ -206,7 +218,8 @@ class HypervExecutor:
             executable_with_params,
             input = input_data,
             capture_output = True,
-            text = True
+            text = True,
+            timeout = 45
         )
         stop_time = time.time()
         self.last_return_code = result.returncode
@@ -216,6 +229,7 @@ class HypervExecutor:
 
     def log_last_error_stream(self, prefix=""):
         if self.last_err is None:
+            hyperv_logger.warning(f"{prefix} There is nothing in last stderr stream!")
             return
         for line in self.last_err.split('\n'):
             hyperv_logger.debug(f"{prefix}{line}")
@@ -224,6 +238,9 @@ class HypervExecutor:
         res = []
 
         delim = "\n"
+        if self.last_out is None:
+            hyperv_logger.warning("get_results_from_last_run: last stdout was None, nothing can be parsed")
+            return []
         sp = self.last_out.split(delim)
         pattern = re.compile("^OUT::")
         for l in sp:
