@@ -5,7 +5,7 @@ $networkSwitchVlan = {{NETWORK_SWITCH_VLAN}}
 
 $vmTemplatesPath = "{{STORAGE_ROOT}}\{{TEMPLATES_STORAGE_NAME}}\{{TEMPLATES_FOLDER_NAME}}"
 $vmPathBase = "{{STORAGE_ROOT}}\{{STORAGE_NAME}}\{{STORAGE_BASE_FOLDER}}"
-$vmConfig = (get-childitem (join-path $vmTemplatesPath $templName)|where{$_.Name -match ".*vm"}).FullName
+$vmConfig = (get-childitem (join-path $vmTemplatesPath $templName)|where{$_.Name -match ".*vm$"}).FullName
 $vmDisk = (get-childitem (join-path $vmTemplatesPath $templName)|where{$_.Name -match ".*vhd*"}).FullName
 
 $matchCPU = get-content $vmConfig |select-string "CPU="
