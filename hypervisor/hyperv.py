@@ -172,7 +172,7 @@ class Hyperv:
             ex.execute("takeSnapshot.t", replacements)
             ex.log_last_error_stream("take_snapshot: ")
             hyperv_logger.debug(str(ex))
-            result = Tr
+            result = True
         except Exception as exc:
             raise exc
         finally:

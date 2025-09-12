@@ -56,6 +56,7 @@ New-VM -Name $newVmName `
 
 Write-Host "[$newVmName] setting count of CPU ..."
 Set-VM -Name $newVmName -ComputerName $targetHost.Name -ProcessorCount $cpuCount
+Set-VM -Name $newVmName -ComputerName $targetHost.Name -CheckpointType Standard
 
 #generate random MAC
 $mac = "00-15-5D" + ("{0:X2}" -f (Get-Random -Minimum 0 -Maximum 256)) + ("{0:X2}" -f (Get-Random -Minimum 0 -Maximum 256)) + ("{0:X2}" -f (Get-Random -Minimum 0 -Maximum 256))
