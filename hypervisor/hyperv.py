@@ -172,7 +172,7 @@ class Hyperv:
             ex.execute("takeSnapshot.t", replacements)
             ex.log_last_error_stream("take_snapshot: ")
             hyperv_logger.debug(str(ex))
-            result = True
+            result = Tr
         except Exception as exc:
             raise exc
         finally:
@@ -198,8 +198,21 @@ class Hyperv:
 
     @log_to(hyperv_logger)
     def remove_snapshot(self, machine_uuid, snapshot_name):
-        hyperv_logger.warning(f"Method >>{inspect.currentframe().f_code.co_name}<<"
-                              f" has not been implemented yet in {sys.modules[__name__]}")
+        try:
+            hyperv_logger.debug(f"remove_snapshot: started ({machine_uuid})")
+            ex = HypervExecutor()
+            replacements = copy.deepcopy(Settings.app['hyperv']['replacements'])
+            replacements["VM_NAME"] = machine_uuid
+            replacements["SNAPSHOT_NAME"] = snapshot_name
+            # print(replacements)
+            ex.execute("removeSnapshot.t", replacements)
+            ex.log_last_error_stream("remove_snapshot: ")
+            hyperv_logger.debug(str(ex))
+        except Exception as exc:
+            raise exc
+        finally:
+            hyperv_logger.debug("remove_snapshot: finished")
+
 
 class HypervExecutor:
     def __init__(self):
