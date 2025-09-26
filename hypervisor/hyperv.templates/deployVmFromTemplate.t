@@ -63,3 +63,7 @@ $mac = "00-15-5D" + ("{0:X2}" -f (Get-Random -Minimum 0 -Maximum 256)) + ("{0:X2
 
 Write-Host "[$newVmName] setting static MAC ..."
 Set-VMNetworkAdapter -VMName $newVmName -StaticMacAddress $mac
+
+Add-ClusterVirtualMachineRole -VirtualMachine $newVmName
+
+#eof
