@@ -85,7 +85,12 @@ class Settings:
                 'replacements':{
 
                 },
-                'credentials_provider':"c:\\getCr.ps1"
+                'credentials_provider':"c:\\getCr.ps1",
+                'search_link_components':{
+                    'wac_server': 'foo',
+                    'scheme': 'https',
+                    'wac_cluster': 'bar',
+                }
             },
             'vms': {
                 'login_username': None,

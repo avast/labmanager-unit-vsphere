@@ -89,10 +89,25 @@ class Hyperv:
             ex.execute("getVmInfo.t", replacements)
             results = ex.get_results_from_last_run()
             hyperv_logger.info(f"get_machine_info: {results}")
+            hyperv_vm_uuid = ""
+            hyperv_host_fqdn = ""
             for line in results:
                 if "OUT::MAC=" in line:
                     mac = str(line).replace("OUT::MAC=", "")
                     res["nos_id"] = f"{Settings.app['nosid_prefix']}{mac}"
+                if "OUT::VMUUID" in line:
+                    hyperv_vm_uuid = line
+                if "OUT::HOSTFQDN" in line:
+                    hyperv_host_fqdn = line
+            if hyperv_vm_uuid != "" and hyperv_host_fqdn != "":
+                # we'll be constructing wac link here
+                link_settings = Settings.app['hyperv']['search_link_components']
+                res['machine_search_link'] = (f"{link_settings['scheme']}://{link_settings['wac_server']}"
+                                              f"/clustermanager/connections/cluster/{link_settings['wac_cluster']}"
+                                              f"/tools/virtualmachines/virtualmachineview"
+                                              f"/vmid/{str(hyperv_vm_uuid).replace('OUT::VMUUID=', '')}"
+                                              f"/vmname/{machine_uuid}"
+                                              f"/server/{str(hyperv_host_fqdn).replace('OUT::HOSTFQDN=', '')}")
             hyperv_logger.debug(str(ex))
         finally:
             hyperv_logger.debug("get_machine_info: finished")
@@ -229,8 +244,6 @@ class HypervExecutor:
 
         input_data = pystache.render(template_str, replacements)
         start_time = time.time()
-        #hyperv_logger.debug(input_data)
-        #return
 
         if invoke_command:
             input_data = (f"\r\n\r\n$cred_fw = & {Settings.app['hyperv']['credentials_provider']}\r\n"
@@ -239,6 +252,8 @@ class HypervExecutor:
             input_data = input_data + ("\r\n\r\n} -Authentication CredSSP -Credential "
                                        "(New-Object System.Management.Automation.PSCredential "
                                        "($cred_fw.user, $cred_fw.pass))\r\n\r\n\r\n\r\n")
+        #hyperv_logger.debug(input_data)
+        #return
 
         executable_with_params = [
             Settings.app['hyperv']['ssh'],
