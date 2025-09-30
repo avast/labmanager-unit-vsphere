@@ -39,6 +39,9 @@ async def req_get_info(request, req_id):
             }]
 
         if req.type is data.RequestType.DEPLOY:
+            if Settings.app['service']["include_machine_subnet_info"]:
+               result_dict['machine_subnet'] = Settings.app['service']['machine_subnet_info']
+
             await Capabilities.fetch(forced=True)
             extra_result = [{
                                'result': {
@@ -53,6 +56,7 @@ async def req_get_info(request, req_id):
                                'type': 'return_value',
             }]
             result = extra_result + result
+
 
         if req.state.is_error():
             unit_name = Settings.app.get('unit_name', 'N/A')
