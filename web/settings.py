@@ -85,6 +85,7 @@ class Settings:
                 'replacements':{
 
                 },
+                'credentials_provider':"c:\\getCr.ps1"
             },
             'vms': {
                 'login_username': None,

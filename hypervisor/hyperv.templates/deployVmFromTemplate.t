@@ -1,4 +1,5 @@
 $templName = "{{TEMPLATE_NAME}}"
+$newVmName = "{{NEW_VM_NAME}}"
 
 $networkSwitchName = "{{NETWORK_SWITCH_NAME}}"
 $networkSwitchVlan = {{NETWORK_SWITCH_VLAN}}
@@ -26,7 +27,6 @@ $memoryStartupBytes = [int]($matchRAM.Line -replace ".*=", "")*1024*1024
 $cpuCount = [int]($matchCPU.Line -replace ".*=", "")
 
 
-$newVmName = "{{NEW_VM_NAME}}"
 $newVMPath = Join-Path $vmPathBase $newVmName
 if(Test-path $newVMPath)
 {

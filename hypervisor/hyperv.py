@@ -53,7 +53,7 @@ class Hyperv:
             replacements["NEW_VM_NAME"] = machine_name
             replacements["TEMPLATE_NAME"] = Settings.app['hyperv']['templatemap'][template_name]
             #print(replacements)
-            ex.execute("deployVmFromTemplate.t", replacements)
+            ex.execute("deployVmFromTemplate.t", replacements, invoke_command=True)
             ex.log_last_error_stream("deploy: ")
             hyperv_logger.debug(str(ex))
             return machine_name
@@ -224,13 +224,21 @@ class HypervExecutor:
             os.path.dirname(os.path.abspath(__file__)),
             'hyperv.templates'
         )
-    def execute(self, template, replacements):
+    def execute(self, template, replacements, invoke_command=False):
         template_str = self._read_template(template)
 
         input_data = pystache.render(template_str, replacements)
         start_time = time.time()
         #hyperv_logger.debug(input_data)
         #return
+
+        if invoke_command:
+            input_data = (f"\r\n\r\n$cred_fw = & {Settings.app['hyperv']['credentials_provider']}\r\n"
+                          f"Invoke-Command -ComputerName {Settings.app['hyperv']['servers'][0]} "
+                          f"-ScriptBlock {{ \r\n\r\n") + input_data
+            input_data = input_data + ("\r\n\r\n} -Authentication CredSSP -Credential "
+                                       "(New-Object System.Management.Automation.PSCredential "
+                                       "($cred_fw.user, $cred_fw.pass))\r\n\r\n\r\n\r\n")
 
         executable_with_params = [
             Settings.app['hyperv']['ssh'],
