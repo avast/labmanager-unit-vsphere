@@ -37,7 +37,17 @@ if(Test-path $newVMPath)
 
 $newVhdPath = Join-Path $newVMPath "disk.vhd"
 
-$targetHost = (Get-ClusterNode)[0]
+
+function Get-LeastLoadedHost {
+    Get-ClusterNode |
+        Where-Object { $_.State -eq 'Up' } |
+        Sort-Object {
+            (Get-VM -ComputerName $_.Name | Where-Object { $_.State -eq 'Running' }).Count
+        } |
+        Select-Object -First 1
+}
+#$targetHost = (Get-ClusterNode)[0]
+$targetHost = Get-LeastLoadedHost
 
 New-Item -ItemType Directory -Path $newVMPath -Force | Out-Null
 
@@ -62,7 +72,7 @@ Set-VM -Name $newVmName -ComputerName $targetHost.Name -CheckpointType Standard
 $mac = "00-15-5D" + ("{0:X2}" -f (Get-Random -Minimum 0 -Maximum 256)) + ("{0:X2}" -f (Get-Random -Minimum 0 -Maximum 256)) + ("{0:X2}" -f (Get-Random -Minimum 0 -Maximum 256))
 
 Write-Host "[$newVmName] setting static MAC ..."
-Set-VMNetworkAdapter -VMName $newVmName -StaticMacAddress $mac
+Set-VMNetworkAdapter -VMName $newVmName -ComputerName $targetHost.Name -StaticMacAddress $mac
 
 Add-ClusterVirtualMachineRole -VirtualMachine $newVmName
 
