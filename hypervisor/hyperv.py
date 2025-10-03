@@ -68,7 +68,7 @@ class Hyperv:
             replacements = copy.deepcopy(Settings.app['hyperv']['replacements'])
             replacements["NEW_VM_NAME"] = device_uuid
             #print(replacements)
-            ex.execute("setVmNetwork.t", replacements)
+            ex.execute("setVmNetwork.t", replacements, invoke_command=True)
             ex.log_last_error_stream("config_network: ")
             hyperv_logger.debug(str(ex))
         finally:
@@ -86,7 +86,7 @@ class Hyperv:
             replacements = copy.deepcopy(Settings.app['hyperv']['replacements'])
             replacements["VM_NAME"] = machine_uuid
             # print(replacements)
-            ex.execute("getVmInfo.t", replacements)
+            ex.execute("getVmInfo.t", replacements, invoke_command=True)
             results = ex.get_results_from_last_run()
             hyperv_logger.info(f"get_machine_info: {results}")
             hyperv_vm_uuid = ""
@@ -122,7 +122,7 @@ class Hyperv:
             replacements = copy.deepcopy(Settings.app['hyperv']['replacements'])
             replacements["VM_NAME"] = machine_uuid
             #print(replacements)
-            ex.execute("startVm.t", replacements)
+            ex.execute("startVm.t", replacements, invoke_command=True)
             ex.log_last_error_stream("start: ")
             hyperv_logger.debug(str(ex))
         finally:
@@ -136,7 +136,7 @@ class Hyperv:
             replacements = copy.deepcopy(Settings.app['hyperv']['replacements'])
             replacements["VM_NAME"] = machine_uuid
             #print(replacements)
-            ex.execute("stopVm.t", replacements)
+            ex.execute("stopVm.t", replacements, invoke_command=True)
             ex.log_last_error_stream("stop: ")
             hyperv_logger.debug(str(ex))
         finally:
@@ -149,7 +149,7 @@ class Hyperv:
             ex = HypervExecutor()
             replacements = copy.deepcopy(Settings.app['hyperv']['replacements'])
             replacements["VM_NAME"] = machine_uuid
-            ex.execute("undeployVm.t", replacements)
+            ex.execute("undeployVm.t", replacements, invoke_command=True)
             ex.log_last_error_stream("undeploy: ")
             hyperv_logger.debug(str(ex))
         finally:
