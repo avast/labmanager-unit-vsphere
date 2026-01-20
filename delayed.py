@@ -110,12 +110,15 @@ if __name__ == '__main__':
     signal.signal(signal.SIGTERM, signal_handler)
     signal.signal(signal.SIGINT, signal_handler)
     vc = None
-    if Settings.app["vsphere"]["hosts_folder_name"]:
+    vc_needed = Settings.app["vsphere"]["hosts_folder_name"] is not None
+    loop_counter = 0
+    if vc_needed:
         vc = vcenter.VCenter()
         vc.connect(quick=True)
 
     process_actions = True
     while process_actions:
+        loop_counter = loop_counter + 1
 
         with data.Connection.use('conn2') as conn:
             try:
@@ -158,6 +161,15 @@ if __name__ == '__main__':
                     logger.error('Exception while processing request: ', exc_info=True)
                     break
 
-        time.sleep(Settings.app['delayed']['sleep'])
+        # check whether we shouldn't re-connect
+        if vc_needed and \
+                (loop_counter % Settings.app['delayed']['reconnect_every_n']) == 0:
+            vc.disconnect()
+            logger.debug(f'vCenter disconnected at: {loop_counter} iteration')
+            vc.connect(quick=True)
+            logger.debug(f'vCenter re-connected at: {loop_counter} iteration')
 
+        time.sleep(Settings.app['delayed']['sleep'])
+    if vc_needed:
+        vc.disconnect()
     logger.debug("Delayed finished")
