@@ -10,6 +10,7 @@ import web.middleware.auth_ldap
 import web.middleware.auth_merger
 import web.middleware.json_params
 import web.middleware.json_response
+import web.middleware.disuse_db_conn_response
 import web.module.capabilities
 import web.module.machines
 import web.module.requests
@@ -97,5 +98,10 @@ async def obtain_request(request):
     else:
         logger.info(f'<< obtained')
 
+if settings.app['db']['sanic_fresh_db_each_request']:
+    lm_unit_webserver.register_middleware(
+        web.middleware.disuse_db_conn_response.disuse_db_conn_response,
+        'response'
+    )
 
 lm_unit_webserver.config.KEEP_ALIVE = settings.app['sanic_keepalive']

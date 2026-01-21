@@ -136,6 +136,15 @@ class Connection(object):
                 raise DbConnectionError("Connection to the DB wasn't successful [async mode]")
         self._last_usage_timestamp = time.time()
 
+    def _disconnect(self):
+        try:
+            if self.client is not None:
+                self.client.close()
+                self.acursor = None
+                self.client = None
+        except Exception:
+            self.__logger.warning('Error disconnecting the db server', exc_info=True)
+
     def _refresh_conn_on_every_usage(self):
         return "socket_reusability" in self._connection_params and \
             self._connection_params["socket_reusability"] == "never"
@@ -240,3 +249,17 @@ class Connection(object):
                 f'Exception when calling use(): {repr(ex)}', exc_info=True
             )
         return connection["connection"]
+
+    @classmethod
+    def disuse(cls, alias=DEFAULT_CONNECTION_NAME):
+        if alias not in cls.__connections:
+            raise ValueError(f'connection {alias} has not been initialized before, '
+                             f'please use connect method')
+
+        connection = cls.__connections[alias]
+        try:
+            connection["connection"]._disconnect()
+        except Exception as ex:
+            logging.getLogger(__name__).error(
+                f'Exception when calling use(): {repr(ex)}', exc_info=True
+            )
